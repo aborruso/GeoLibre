@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  GEOGRAPHIC_WMS_CRS,
   describeWmsFailure,
   geographicTileToMercator,
   geographicWmsRequest,
@@ -143,4 +145,18 @@ test("geographicWmsRequest trims the CRS as Python does", () => {
   const request = geographicWmsRequest(getMap("1.1.1", "%20epsg:6706%20"));
   assert.ok(request);
   assertClose(bboxOf(request.url), [WEST, SOUTH, EAST, NORTH]);
+});
+
+test("GEOGRAPHIC_WMS_CRS matches Python's WMS_CRS minus EPSG:3857", () => {
+  // The two allowlists live in different languages; a CRS Python writes that
+  // the desktop does not know renders blank, so keep them equal by test.
+  const source = readFileSync(
+    new URL("../python/src/geolibre/project.py", import.meta.url),
+    "utf8",
+  );
+  const literal = source.match(/^WMS_CRS = frozenset\(\{([^}]*)\}\)/m);
+  assert.ok(literal, "WMS_CRS literal not found in project.py");
+  const python = new Set([...literal[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]));
+  python.delete("EPSG:3857");
+  assert.deepEqual([...GEOGRAPHIC_WMS_CRS].sort(), [...python].sort());
 });

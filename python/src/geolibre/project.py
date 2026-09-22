@@ -1384,7 +1384,8 @@ def _normalize_wms_version(version: str | None) -> str:
 #: geographic ones are for servers without EPSG:3857, which the desktop app
 #: requests per tile in that CRS and redraws into Web Mercator. Keep in step with
 #: `GEOGRAPHIC_WMS_CRS` in `apps/geolibre-desktop/src/lib/wms-geographic.ts`:
-#: a geographic CRS accepted here but missing there renders blank.
+#: a geographic CRS accepted here but missing there renders blank, and
+#: `tests/wms-geographic.test.ts` fails when the two drift.
 WMS_CRS = frozenset({"EPSG:3857", "EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"})
 
 
