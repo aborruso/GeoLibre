@@ -138,3 +138,9 @@ test("geographicTileToMercator reports a non-image response with the server's te
     /^Error: WMS GetMap returned no image: <ServiceExceptionReport>InvalidSRS/,
   );
 });
+
+test("geographicWmsRequest trims the CRS as Python does", () => {
+  const request = geographicWmsRequest(getMap("1.1.1", "%20epsg:6706%20"));
+  assert.ok(request);
+  assertClose(bboxOf(request.url), [WEST, SOUTH, EAST, NORTH]);
+});

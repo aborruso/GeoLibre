@@ -269,6 +269,13 @@ def test_wms_layer_replaces_getmap_keys_already_in_the_endpoint():
     assert tile.startswith("https://e/wms?map=/srv/a.map&SERVICE=WMS")
 
 
+def test_wms_layer_replaces_a_percent_encoded_getmap_key():
+    tile = project.wms_layer("x", "https://e/wms?%73RS=EPSG:3857&map=a", "a", crs="EPSG:6706")[
+        "source"
+    ]["tiles"][0]
+    assert "%73RS" not in tile and tile.count("SRS=") == 1
+
+
 def test_wms_layer_replaces_a_crs_already_in_the_endpoint():
     for key in ("SRS", "crs"):
         tile = project.wms_layer(

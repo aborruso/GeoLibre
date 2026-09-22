@@ -1313,7 +1313,11 @@ def _drop_query_keys(endpoint: str, keys: frozenset[str]) -> str:
     path, qmark, query = base.partition("?")
     if not qmark:
         return endpoint
-    kept = [part for part in query.split("&") if part.split("=", 1)[0].lower() not in keys]
+    # Names are compared decoded, as a server or `URLSearchParams` reads them,
+    # so `%73RS=` counts as `SRS=`; kept parameters stay as written.
+    kept = [
+        part for part in query.split("&") if unquote_plus(part.split("=", 1)[0]).lower() not in keys
+    ]
     return f"{path}?{'&'.join(kept)}{sep}{fragment}"
 
 

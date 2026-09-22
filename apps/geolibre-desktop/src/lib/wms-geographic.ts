@@ -64,7 +64,8 @@ export function geographicWmsRequest(url: string): GeographicWmsRequest | null {
   }
   const params = parsed.searchParams;
   const crs = queryParam(params, "crs") ?? queryParam(params, "srs");
-  if (!crs || !GEOGRAPHIC_WMS_CRS.has(crs[1].toUpperCase())) return null;
+  const crsCode = crs?.[1].trim().toUpperCase() ?? "";
+  if (!GEOGRAPHIC_WMS_CRS.has(crsCode)) return null;
   const bbox = queryParam(params, "bbox");
   if (!bbox) return null;
   const values = bbox[1].split(",").map(Number);
@@ -82,7 +83,7 @@ export function geographicWmsRequest(url: string): GeographicWmsRequest | null {
   // Any 1.3.x version, as Python's `_normalize_wms_version` reads it, so a
   // hand-written `VERSION=1.3` does not silently swap the axes.
   const version = queryParam(params, "version")?.[1].trim() ?? "";
-  const latitudeFirst = version.startsWith("1.3") && crs[1].toUpperCase() !== "CRS:84";
+  const latitudeFirst = version.startsWith("1.3") && crsCode !== "CRS:84";
   const degrees = latitudeFirst ? [south, west, north, east] : [west, south, east, north];
   params.set(bbox[0], degrees.join(","));
   return { url: parsed.toString(), west, south, east, north };
