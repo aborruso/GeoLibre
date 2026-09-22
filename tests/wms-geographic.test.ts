@@ -94,3 +94,9 @@ test("mercatorStrips stretch northern strips over a low-zoom tile", () => {
   const strips = mercatorStrips(0, 66.51326044311186, 256, 256);
   assert.ok(strips[0].targetHeight > strips.at(-1)!.targetHeight);
 });
+
+test("mercatorStrips clamp latitudes beyond the Web Mercator limit", () => {
+  for (const strip of mercatorStrips(-90, 90, 256, 256)) {
+    assert.ok(Number.isFinite(strip.targetY) && Number.isFinite(strip.targetHeight));
+  }
+});

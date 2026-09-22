@@ -45,7 +45,8 @@ function latitudeFromMercatorY(y: number): number {
 
 /** Normalized Web Mercator y (0 at the top of the world, 1 at the bottom). */
 function mercatorY(latitude: number): number {
-  const radians = (latitude * Math.PI) / 180;
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, latitude));
+  const radians = (lat * Math.PI) / 180;
   return (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2;
 }
 
