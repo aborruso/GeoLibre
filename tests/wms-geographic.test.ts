@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  describeWmsFailure,
   geographicWmsRequest,
   mercatorStrips,
 } from "../apps/geolibre-desktop/src/lib/wms-geographic";
@@ -105,4 +106,20 @@ test("degenerate extents produce no request and no strips", () => {
   assert.equal(geographicWmsRequest(`${ENDPOINT}?SRS=EPSG:4326&BBOX=0,5,0,10`), null);
   assert.equal(geographicWmsRequest(`${ENDPOINT}?SRS=EPSG:4326&BBOX=0,10,5,5`), null);
   assert.deepEqual(mercatorStrips(40, 40, 256, 256), []);
+});
+
+test("geographicWmsRequest reads any 1.3.x version as latitude first", () => {
+  const request = geographicWmsRequest(
+    getMap("1.3.0", "EPSG:4326").replace("VERSION=1.3.0", "VERSION=1.3"),
+  );
+  assert.ok(request);
+  assertClose(bboxOf(request.url), [SOUTH, WEST, NORTH, EAST]);
+});
+
+test("describeWmsFailure surfaces the server's exception text", () => {
+  const body = new TextEncoder().encode(
+    '<?xml version="1.0"?>\n<ServiceExceptionReport>\n  <ServiceException code="InvalidSRS">bad CRS</ServiceException>',
+  ).buffer;
+  assert.match(describeWmsFailure(body), /^WMS GetMap returned no image: .*InvalidSRS.*bad CRS/);
+  assert.equal(describeWmsFailure(new ArrayBuffer(0)), "WMS GetMap returned no image");
 });

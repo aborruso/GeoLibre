@@ -79,8 +79,10 @@ export function geographicWmsRequest(url: string): GeographicWmsRequest | null {
   const north = latitudeFromMercatorY(maxY);
   // WMS 1.3.0 follows the EPSG axis order, latitude first, for EPSG:4326,
   // EPSG:4258 and EPSG:6706. CRS:84 and WMS 1.1.1 stay longitude first.
-  const version = queryParam(params, "version")?.[1];
-  const latitudeFirst = version === "1.3.0" && crs[1].toUpperCase() !== "CRS:84";
+  // Any 1.3.x version, as Python's `_normalize_wms_version` reads it, so a
+  // hand-written `VERSION=1.3` does not silently swap the axes.
+  const version = queryParam(params, "version")?.[1].trim() ?? "";
+  const latitudeFirst = version.startsWith("1.3") && crs[1].toUpperCase() !== "CRS:84";
   const degrees = latitudeFirst ? [south, west, north, east] : [west, south, east, north];
   params.set(bbox[0], degrees.join(","));
   return { url: parsed.toString(), west, south, east, north };
@@ -116,12 +118,26 @@ export function mercatorStrips(
   return strips;
 }
 
+/**
+ * The start of a GetMap response that is not an image, typically an XML
+ * `ServiceException` naming the real cause (an unsupported CRS, a bad BBOX).
+ */
+export function describeWmsFailure(bytes: ArrayBuffer): string {
+  const text = new TextDecoder().decode(bytes.slice(0, 400)).replace(/\s+/g, " ").trim();
+  return `WMS GetMap returned no image${text ? `: ${text}` : ""}`;
+}
+
 /** Redraw a latitude-linear WMS image as a Web Mercator PNG tile. */
 export async function geographicTileToMercator(
   bytes: ArrayBuffer,
   request: GeographicWmsRequest,
 ): Promise<ArrayBuffer> {
-  const bitmap = await createImageBitmap(new Blob([bytes]));
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(new Blob([bytes]));
+  } catch {
+    throw new Error(describeWmsFailure(bytes));
+  }
   try {
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext("2d");
