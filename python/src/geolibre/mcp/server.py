@@ -595,9 +595,14 @@ def build_server(workspace: Workspace) -> MCPServer:
         Raises:
             ValueError: If `service` is not `wms` or `wmts`, if `layers` is
                 missing for `wms`, if `bounds` is not four finite numbers
-                with valid latitudes, or if `crs` is not a supported CRS.
+                with valid latitudes, or if `crs` is not a supported CRS or
+                is given for `wmts`.
         """
         if service == "wmts":
+            if crs is not None:
+                # A WMTS template carries its own tile matrix set; there is no
+                # GetMap request for a CRS to change.
+                raise ValueError("add_ogc_layer: 'crs' applies only to service='wms'")
             layer = _project.wmts_layer(name, endpoint, tile_size=tile_size, bounds=bounds)
         elif service == "wms":
             if not layers:

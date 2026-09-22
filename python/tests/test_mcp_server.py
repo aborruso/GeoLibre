@@ -748,6 +748,18 @@ def test_add_ogc_layer_rejects_an_unsupported_crs(server, project_path):
     )
 
 
+def test_add_ogc_layer_rejects_crs_for_wmts(server, project_path):
+    assert "applies only to service='wms'" in call_error(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="Tiles",
+        service="wmts",
+        endpoint="https://example.com/wmts/{z}/{y}/{x}.png",
+        crs="EPSG:4326",
+    )
+
+
 def test_add_ogc_layer_rejects_an_unknown_service(server, project_path):
     assert "wms" in call_error(
         server,

@@ -4,7 +4,11 @@
 // protocol asks for the tile's lon/lat extent in that CRS and redraws the
 // latitude-linear image into Web Mercator, strip by strip.
 
-/** Geographic CRSs the desktop can request and redraw into Web Mercator. */
+/**
+ * Geographic CRSs the desktop can request and redraw into Web Mercator. Keep in
+ * step with `WMS_CRS` in `python/src/geolibre/project.py`, which is this set
+ * plus EPSG:3857: a CRS Python accepts but this set lacks renders blank.
+ */
 export const GEOGRAPHIC_WMS_CRS = new Set(["EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"]);
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
