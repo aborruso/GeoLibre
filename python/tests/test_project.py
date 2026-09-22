@@ -279,6 +279,12 @@ def test_wms_layer_replaces_a_crs_already_in_the_endpoint():
         assert "EPSG:3857" not in tile and "crs=" not in tile
 
 
+def test_wms_layer_rejects_crs84_outside_wms_1_3_0():
+    with pytest.raises(ValueError, match="needs version='1.3.0'"):
+        project.wms_layer("x", "https://e/wms", "a", crs="CRS:84")
+    assert project.wms_layer("x", "https://e/wms", "a", version="1.3.0", crs="crs:84")
+
+
 def test_wms_layer_rejects_a_crs_the_desktop_cannot_redraw():
     # A projected CRS would need a real reprojection, not a strip redraw.
     with pytest.raises(ValueError, match="crs must be one of"):

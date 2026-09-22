@@ -92,7 +92,7 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   lists it in the capabilities, because a server without Web Mercator answers
   every tile with an XML exception and the layer stays blank. For such a
   server pass a geographic CRS it does list (`EPSG:4326`, `EPSG:4258`,
-  `EPSG:6706`, `CRS:84`): the desktop app redraws those tiles into Web
+  `EPSG:6706`, or `CRS:84` with `version="1.3.0"`): the desktop app redraws those tiles into Web
   Mercator, while the web build and `export_html` pages cannot show them.
 
 ### Editing

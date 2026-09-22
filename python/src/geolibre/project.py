@@ -1454,10 +1454,14 @@ def wms_layer(
 
     Raises:
         ValueError: If ``bounds`` is not four finite numbers with valid latitudes,
-            or ``crs`` is not one of :data:`WMS_CRS`.
+            ``crs`` is not one of :data:`WMS_CRS`, or ``crs`` is ``"CRS:84"``
+            with a version other than 1.3.0.
     """
     wms_version = _normalize_wms_version(version)
     wms_crs = _normalize_wms_crs(crs)
+    if wms_crs == "CRS:84" and wms_version != "1.3.0":
+        # CRS:84 is defined by WMS 1.3.0; a 1.1.1 server rejects it as an SRS.
+        raise ValueError("crs='CRS:84' needs version='1.3.0'; use EPSG:4326 with WMS 1.1.1")
     # An endpoint copied from a capabilities OnlineResource or a GetMap URL
     # may already carry VERSION, CRS or BBOX. A duplicate would leave the
     # server and the desktop tile protocol (which reads the first VERSION to
