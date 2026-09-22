@@ -91,6 +91,9 @@ async function fetchNativeWmsTile(url: string): Promise<{ data: ArrayBuffer }> {
   // A WMS without EPSG:3857 is stored with a geographic SRS/CRS: fetch the
   // tile's lon/lat extent in that CRS and redraw it into Web Mercator.
   const geographic = geographicWmsRequest(url);
+  // Every EPSG:3857 tile takes this path. A geographic one that cannot be
+  // converted (e.g. a degenerate BBOX) is sent as is, so the server's own
+  // exception reaches the diagnostics panel instead of a client-side guess.
   if (!geographic) return fetchNativeTile(url);
   const { data } = await fetchNativeTile(geographic.url);
   return { data: await geographicTileToMercator(data, geographic) };

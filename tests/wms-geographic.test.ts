@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   describeWmsFailure,
+  geographicTileToMercator,
   geographicWmsRequest,
   mercatorStrips,
 } from "../apps/geolibre-desktop/src/lib/wms-geographic";
@@ -122,4 +123,18 @@ test("describeWmsFailure surfaces the server's exception text", () => {
   ).buffer;
   assert.match(describeWmsFailure(body), /^WMS GetMap returned no image: .*InvalidSRS.*bad CRS/);
   assert.equal(describeWmsFailure(new ArrayBuffer(0)), "WMS GetMap returned no image");
+});
+
+test("geographicTileToMercator reports a non-image response with the server's text", async () => {
+  // Under node there is no image decoder, so this exercises the same path a
+  // WebView takes when the server answers with an XML exception.
+  const request = geographicWmsRequest(getMap("1.1.1", "EPSG:6706"));
+  assert.ok(request);
+  const body = new TextEncoder().encode(
+    "<ServiceExceptionReport>InvalidSRS</ServiceExceptionReport>",
+  );
+  await assert.rejects(
+    geographicTileToMercator(body.buffer, request),
+    /^Error: WMS GetMap returned no image: <ServiceExceptionReport>InvalidSRS/,
+  );
 });
