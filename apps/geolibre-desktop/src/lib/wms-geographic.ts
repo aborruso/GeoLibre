@@ -71,6 +71,8 @@ export function geographicWmsRequest(url: string): GeographicWmsRequest | null {
   if (values.length !== 4 || !values.every(Number.isFinite)) return null;
 
   const [minX, minY, maxX, maxY] = values;
+  // A zero-height or inverted extent has nothing to redraw.
+  if (!(maxX > minX && maxY > minY)) return null;
   const west = longitudeFromMercatorX(minX);
   const east = longitudeFromMercatorX(maxX);
   const south = latitudeFromMercatorY(minY);
@@ -97,6 +99,9 @@ export function mercatorStrips(
   const top = mercatorY(north);
   const span = mercatorY(south) - top;
   const strips: StripPlacement[] = [];
+  // Strips divide by the extent's height: a degenerate one yields no strips
+  // rather than NaN placements that would make drawImage throw.
+  if (!(span > 0)) return strips;
   for (let strip = 0; strip < LATITUDE_STRIPS; strip += 1) {
     const stripNorth = north - ((north - south) * strip) / LATITUDE_STRIPS;
     const stripSouth = north - ((north - south) * (strip + 1)) / LATITUDE_STRIPS;

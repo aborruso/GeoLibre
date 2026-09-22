@@ -100,3 +100,9 @@ test("mercatorStrips clamp latitudes beyond the Web Mercator limit", () => {
     assert.ok(Number.isFinite(strip.targetY) && Number.isFinite(strip.targetHeight));
   }
 });
+
+test("degenerate extents produce no request and no strips", () => {
+  assert.equal(geographicWmsRequest(`${ENDPOINT}?SRS=EPSG:4326&BBOX=0,5,0,10`), null);
+  assert.equal(geographicWmsRequest(`${ENDPOINT}?SRS=EPSG:4326&BBOX=0,10,5,5`), null);
+  assert.deepEqual(mercatorStrips(40, 40, 256, 256), []);
+});
