@@ -253,6 +253,22 @@ def test_wms_layer_crs_for_a_server_without_web_mercator():
     )
 
 
+def test_wms_layer_replaces_getmap_keys_already_in_the_endpoint():
+    # A capabilities OnlineResource often carries the whole GetMap query.
+    tile = project.wms_layer(
+        "x",
+        "https://e/wms?map=/srv/a.map&service=WMS&version=1.1.1&request=GetMap&bbox=1,2,3,4",
+        "a",
+        version="1.3.0",
+        crs="EPSG:4326",
+    )["source"]["tiles"][0]
+    lowered = tile.lower()
+    for key in ("service=", "request=", "version=", "bbox="):
+        assert lowered.count(key) == 1, key
+    assert "VERSION=1.3.0" in tile and "CRS=EPSG%3A4326" in tile
+    assert tile.startswith("https://e/wms?map=/srv/a.map&SERVICE=WMS")
+
+
 def test_wms_layer_replaces_a_crs_already_in_the_endpoint():
     for key in ("SRS", "crs"):
         tile = project.wms_layer(

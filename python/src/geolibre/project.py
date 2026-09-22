@@ -1277,7 +1277,26 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
-def _drop_query_keys(endpoint: str, keys: set[str]) -> str:
+#: The GetMap parameters `wms_layer` writes itself, lower-cased.
+_WMS_GETMAP_KEYS = frozenset(
+    {
+        "service",
+        "request",
+        "version",
+        "layers",
+        "styles",
+        "format",
+        "transparent",
+        "srs",
+        "crs",
+        "bbox",
+        "width",
+        "height",
+    }
+)
+
+
+def _drop_query_keys(endpoint: str, keys: frozenset[str]) -> str:
     """Remove query parameters named in ``keys`` (case-insensitive) from a URL.
 
     The other parameters are kept byte for byte, in order, so a vendor option
@@ -1439,11 +1458,13 @@ def wms_layer(
     """
     wms_version = _normalize_wms_version(version)
     wms_crs = _normalize_wms_crs(crs)
-    # An endpoint copied from a GetMap URL may already name a CRS; a second
-    # one would leave the server, and the desktop tile protocol, reading the
-    # first instead of the one written here.
+    # An endpoint copied from a capabilities OnlineResource or a GetMap URL
+    # may already carry VERSION, CRS or BBOX. A duplicate would leave the
+    # server and the desktop tile protocol (which reads the first VERSION to
+    # pick the axis order) disagreeing, so every key written here replaces
+    # the endpoint's own; vendor parameters such as `map=` are kept.
     tile_url = _append_query(
-        _drop_query_keys(endpoint, {"srs", "crs"}),
+        _drop_query_keys(endpoint, _WMS_GETMAP_KEYS),
         [
             ("SERVICE", "WMS"),
             ("REQUEST", "GetMap"),
