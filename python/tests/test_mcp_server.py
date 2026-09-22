@@ -720,6 +720,34 @@ def test_add_ogc_layer_passes_bounds_through(server, project_path, tmp_path, ser
     assert written["layers"][-1]["source"]["bounds"] == [8.14, 38.85, 9.83, 41.31]
 
 
+def test_add_ogc_layer_passes_crs_through(server, project_path, tmp_path):
+    call(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="Cadastre",
+        service="wms",
+        endpoint="https://example.com/wms",
+        layers="CP.CadastralParcel",
+        crs="EPSG:6706",
+    )
+    written = json.loads((tmp_path / project_path).read_text(encoding="utf-8"))
+    assert "SRS=EPSG%3A6706" in written["layers"][-1]["source"]["tiles"][0]
+
+
+def test_add_ogc_layer_rejects_an_unsupported_crs(server, project_path):
+    assert "crs must be one of" in call_error(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="Cadastre",
+        service="wms",
+        endpoint="https://example.com/wms",
+        layers="CP.CadastralParcel",
+        crs="EPSG:25833",
+    )
+
+
 def test_add_ogc_layer_rejects_an_unknown_service(server, project_path):
     assert "wms" in call_error(
         server,

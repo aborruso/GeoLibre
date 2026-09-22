@@ -233,6 +233,32 @@ def test_wms_layer_version_defaults_to_1_1_1():
     )
 
 
+def test_wms_layer_crs_for_a_server_without_web_mercator():
+    # The Agenzia delle Entrate cadastral WMS lists only EPSG:6706, EPSG:4258
+    # and UTM zones. The template names the geographic CRS and keeps the Web
+    # Mercator placeholder, which the desktop tile protocol converts per tile.
+    layer = project.wms_layer("x", "https://e/wms", "a", crs="epsg:6706")
+    tile = layer["source"]["tiles"][0]
+    assert "SRS=EPSG%3A6706" in tile
+    assert "EPSG%3A3857" not in tile
+    assert "BBOX={bbox-epsg-3857}" in tile
+    tile = project.wms_layer("x", "https://e/wms", "a", version="1.3.0", crs="CRS:84")["source"][
+        "tiles"
+    ][0]
+    assert "CRS=CRS%3A84" in tile
+    # None keeps Web Mercator.
+    assert (
+        "SRS=EPSG%3A3857"
+        in project.wms_layer("x", "https://e/wms", "a", crs=None)["source"]["tiles"][0]
+    )
+
+
+def test_wms_layer_rejects_a_crs_the_desktop_cannot_redraw():
+    # A projected CRS would need a real reprojection, not a strip redraw.
+    with pytest.raises(ValueError, match="crs must be one of"):
+        project.wms_layer("x", "https://e/wms", "a", crs="EPSG:25833")
+
+
 def test_wms_layer_transparent_false():
     layer = project.wms_layer("x", "https://e/wms", "a", transparent=False, tile_size=512)
     tile = layer["source"]["tiles"][0]

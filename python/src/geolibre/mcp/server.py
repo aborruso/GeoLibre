@@ -557,6 +557,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        crs: str | None = None,
         bounds: list[float] | None = None,
         index: int | None = None,
     ) -> dict[str, Any]:
@@ -574,6 +575,12 @@ def build_server(workspace: Workspace) -> MCPServer:
             transparent: Request a transparent background (WMS).
             tile_size: Tile edge in pixels.
             version: WMS protocol version, e.g. `1.1.1` or `1.3.0`.
+            crs: The CRS WMS tiles are requested in; `EPSG:3857` when
+                omitted. Check the capabilities first: if the layer does not
+                list EPSG:3857, pass a geographic CRS it does list
+                (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, `CRS:84`). The
+                desktop app redraws those tiles into Web Mercator; the web
+                build and `export_html` pages cannot show them.
             bounds: The layer's extent as `[west, south, east, north]` in
                 WGS84. A service layer has no geometry to derive it from, so
                 without this "zoom to layer" cannot reach it. Read it from the
@@ -587,8 +594,8 @@ def build_server(workspace: Workspace) -> MCPServer:
 
         Raises:
             ValueError: If `service` is not `wms` or `wmts`, if `layers` is
-                missing for `wms`, or if `bounds` is not four finite numbers
-                with valid latitudes.
+                missing for `wms`, if `bounds` is not four finite numbers
+                with valid latitudes, or if `crs` is not a supported CRS.
         """
         if service == "wmts":
             layer = _project.wmts_layer(name, endpoint, tile_size=tile_size, bounds=bounds)
@@ -604,6 +611,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                crs=crs,
                 bounds=bounds,
             )
         else:

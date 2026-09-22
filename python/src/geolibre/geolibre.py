@@ -2348,6 +2348,7 @@ class Map(anywidget.AnyWidget):
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        crs: str | None = None,
         bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
@@ -2364,6 +2365,11 @@ class Map(anywidget.AnyWidget):
             version: WMS protocol version, ``"1.1.1"`` (default) or
                 ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
                 some servers accept only one version.
+            crs: The CRS tiles are requested in, ``"EPSG:3857"`` when None.
+                For a server without Web Mercator, a geographic CRS it lists
+                (``"EPSG:4326"``, ``"EPSG:4258"``, ``"EPSG:6706"``,
+                ``"CRS:84"``): the desktop app redraws those tiles into Web
+                Mercator.
             bounds: Optional ``[west, south, east, north]`` request bounds, in
                 WGS84. A WMS layer has no geometry to derive an extent from,
                 so without these "zoom to layer" cannot reach it.
@@ -2373,7 +2379,8 @@ class Map(anywidget.AnyWidget):
             The id of the added layer.
 
         Raises:
-            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
+            ValueError: If ``bounds`` is not four finite numbers with valid
+                latitudes, or ``crs`` is not a supported CRS.
         """
         return self._add_layer(
             _project.wms_layer(
@@ -2385,6 +2392,7 @@ class Map(anywidget.AnyWidget):
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                crs=crs,
                 bounds=bounds,
                 **style,
             )

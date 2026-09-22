@@ -60,7 +60,7 @@ add_raster_layer(path, name, url, bands=None, colormap=None, rescale=None,
 add_tile_layer(path, name, url, tile_size=256, attribution=None, index=None)
 add_ogc_layer(path, name, service, endpoint, layers=None, styles="",
               image_format="image/png", transparent=True, tile_size=256,
-              version="1.1.1", bounds=None, index=None)
+              version="1.1.1", crs=None, bounds=None, index=None)
 add_tiles_layer(path, name, url, kind="pmtiles", tile_type="vector",
                 source_layers=None, style=None, index=None)
 add_3d_tiles_layer(path, name, url=None, ion_asset_id=None, altitude_offset=0, index=None)
@@ -87,7 +87,13 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   `ows:WGS84BoundingBox` for WMTS, which is where the WMS element is absent.
   Both are already lon/lat, unlike a WMS 1.3.0 `BoundingBox CRS="EPSG:4326"`,
   whose axis order servers often get wrong. Passing anything other than four
-  values is an error rather than a silently dropped extent.
+  values is an error rather than a silently dropped extent. `crs` is the CRS
+  WMS tiles are requested in, `EPSG:3857` when omitted: check that the layer
+  lists it in the capabilities, because a server without Web Mercator answers
+  every tile with an XML exception and the layer stays blank. For such a
+  server pass a geographic CRS it does list (`EPSG:4326`, `EPSG:4258`,
+  `EPSG:6706`, `CRS:84`): the desktop app redraws those tiles into Web
+  Mercator, while the web build and `export_html` pages cannot show them.
 
 ### Editing
 

@@ -1336,6 +1336,32 @@ def _normalize_wms_version(version: str | None) -> str:
     return "1.3.0" if version.strip().startswith("1.3") else "1.1.1"
 
 
+#: CRSs a WMS layer can be requested in. MapLibre tiles are Web Mercator; the
+#: geographic ones are for servers without EPSG:3857, which the desktop app
+#: requests per tile in that CRS and redraws into Web Mercator.
+WMS_CRS = frozenset({"EPSG:3857", "EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"})
+
+
+def _normalize_wms_crs(crs: str | None) -> str:
+    """Normalize the CRS a WMS layer requests its tiles in.
+
+    Args:
+        crs: The requested CRS code, or None for Web Mercator.
+
+    Returns:
+        The upper-cased code, ``"EPSG:3857"`` for None.
+
+    Raises:
+        ValueError: If ``crs`` is not one of :data:`WMS_CRS`.
+    """
+    if crs is None:
+        return "EPSG:3857"
+    code = str(crs).strip().upper()
+    if code not in WMS_CRS:
+        raise ValueError(f"crs must be one of {sorted(WMS_CRS)}, got {crs!r}")
+    return code
+
+
 def wms_layer(
     name: str,
     endpoint: str,
@@ -1346,6 +1372,7 @@ def wms_layer(
     transparent: bool = True,
     tile_size: int = 256,
     version: str | None = "1.1.1",
+    crs: str | None = None,
     bounds: list[float] | None = None,
     **style: Any,
 ) -> dict[str, Any]:
@@ -1367,6 +1394,13 @@ def wms_layer(
             Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
             only one version. EPSG:3857 keeps its axis order in both, so the
             BBOX template is unchanged. None falls back to ``"1.1.1"``.
+        crs: The CRS tiles are requested in: ``"EPSG:3857"`` (None, the
+            default) or, for a server that does not offer Web Mercator, a
+            geographic CRS it does list in its capabilities (``"EPSG:4326"``,
+            ``"EPSG:4258"``, ``"EPSG:6706"``, ``"CRS:84"``). The desktop app
+            requests each tile's lon/lat extent in that CRS and redraws it
+            into Web Mercator; the web build still sends the Web Mercator
+            BBOX, which such a server rejects.
         bounds: Optional ``[west, south, east, north]`` request bounds, in
             WGS84. Take them from the service's ``EX_GeographicBoundingBox``,
             which is always lon/lat, rather than a 1.3.0 ``BoundingBox
@@ -1377,9 +1411,11 @@ def wms_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
+        ValueError: If ``bounds`` is not four finite numbers with valid latitudes,
+            or ``crs`` is not one of :data:`WMS_CRS`.
     """
     wms_version = _normalize_wms_version(version)
+    wms_crs = _normalize_wms_crs(crs)
     tile_url = _append_query(
         endpoint,
         [
@@ -1390,7 +1426,7 @@ def wms_layer(
             ("STYLES", styles),
             ("FORMAT", image_format),
             ("TRANSPARENT", "TRUE" if transparent else "FALSE"),
-            ("CRS" if wms_version == "1.3.0" else "SRS", "EPSG:3857"),
+            ("CRS" if wms_version == "1.3.0" else "SRS", wms_crs),
             ("BBOX", "{bbox-epsg-3857}"),
             ("WIDTH", str(tile_size)),
             ("HEIGHT", str(tile_size)),
