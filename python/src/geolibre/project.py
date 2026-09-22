@@ -1277,6 +1277,27 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
+def _drop_query_keys(endpoint: str, keys: set[str]) -> str:
+    """Remove query parameters named in ``keys`` (case-insensitive) from a URL.
+
+    The other parameters are kept byte for byte, in order, so a vendor option
+    such as ``map=...`` reaches the server exactly as the caller wrote it.
+
+    Args:
+        endpoint: A URL that may carry a query string.
+        keys: Lower-case parameter names to drop.
+
+    Returns:
+        The endpoint without those parameters.
+    """
+    base, sep, fragment = endpoint.partition("#")
+    path, qmark, query = base.partition("?")
+    if not qmark:
+        return endpoint
+    kept = [part for part in query.split("&") if part.split("=", 1)[0].lower() not in keys]
+    return f"{path}?{'&'.join(kept)}{sep}{fragment}"
+
+
 def _resolve_bounds(bounds: list[float] | None) -> list[float] | None:
     """Validate optional layer bounds and coerce them to floats.
 
@@ -1418,8 +1439,11 @@ def wms_layer(
     """
     wms_version = _normalize_wms_version(version)
     wms_crs = _normalize_wms_crs(crs)
+    # An endpoint copied from a GetMap URL may already name a CRS; a second
+    # one would leave the server, and the desktop tile protocol, reading the
+    # first instead of the one written here.
     tile_url = _append_query(
-        endpoint,
+        _drop_query_keys(endpoint, {"srs", "crs"}),
         [
             ("SERVICE", "WMS"),
             ("REQUEST", "GetMap"),

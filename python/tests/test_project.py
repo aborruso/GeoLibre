@@ -253,6 +253,16 @@ def test_wms_layer_crs_for_a_server_without_web_mercator():
     )
 
 
+def test_wms_layer_replaces_a_crs_already_in_the_endpoint():
+    for key in ("SRS", "crs"):
+        tile = project.wms_layer(
+            "x", f"https://e/wms?map=/srv/a.map&{key}=EPSG:3857", "a", crs="EPSG:6706"
+        )["source"]["tiles"][0]
+        assert tile.startswith("https://e/wms?map=/srv/a.map&SERVICE=WMS")
+        assert tile.count("SRS=") == 1 and "SRS=EPSG%3A6706" in tile
+        assert "EPSG:3857" not in tile and "crs=" not in tile
+
+
 def test_wms_layer_rejects_a_crs_the_desktop_cannot_redraw():
     # A projected CRS would need a real reprojection, not a strip redraw.
     with pytest.raises(ValueError, match="crs must be one of"):
