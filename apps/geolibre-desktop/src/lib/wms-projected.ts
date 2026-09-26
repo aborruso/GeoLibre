@@ -149,8 +149,13 @@ export async function projectedWmsRequest(url: string): Promise<ProjectedWmsRequ
   const topLeft = project(minX, maxY);
   const size = (span: number, edge: number) =>
     Math.min(tileSize * MAX_IMAGE_SCALE, Math.max(1, Math.round((tileSize * span) / edge)));
-  const width = size(maxE - minE, distance(topLeft, project(maxX, maxY)));
-  const height = size(maxN - minN, distance(topLeft, project(minX, minY)));
+  const topEdge = distance(topLeft, project(maxX, maxY));
+  const leftEdge = distance(topLeft, project(minX, minY));
+  // An edge that collapses to a point (a singularity of the projection) cannot
+  // be warped: send the request as is, like a degenerate BBOX.
+  if (!(topEdge > 0 && leftEdge > 0)) return null;
+  const width = size(maxE - minE, topEdge);
+  const height = size(maxN - minN, leftEdge);
 
   const version = queryParam(params, "version")?.[1].trim() ?? "";
   const northFirst = version.startsWith("1.3") && projection.northFirst;
