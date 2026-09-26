@@ -143,6 +143,22 @@ test("sourcePixelMap matches a direct reprojection of every sampled pixel", asyn
   assert.ok(worst < 0.05, `grid interpolation error ${worst} px`);
 });
 
+test("sourcePixelMap scales with the size of the image the server returned", async () => {
+  const request = await projectedWmsRequest(getMap("1.1.1", "EPSG:25832"));
+  assert.ok(request);
+  const full = sourcePixelMap(request);
+  const width = Math.round(request.width / 2);
+  const height = Math.round(request.height / 2);
+  const capped = sourcePixelMap({ ...request, width, height });
+  for (let i = 0; i < full.length; i += 2 * 257) {
+    // Same position as a fraction of the image, whatever its size.
+    assert.ok(Math.abs((full[i] + 0.5) / request.width - (capped[i] + 0.5) / width) < 1e-4);
+    assert.ok(
+      Math.abs((full[i + 1] + 0.5) / request.height - (capped[i + 1] + 0.5) / height) < 1e-4,
+    );
+  }
+});
+
 test("warpToMercator samples the nearest source pixel and leaves outside pixels transparent", () => {
   // A 4x4 source whose red channel is its column and green channel its row.
   const source = new Uint8ClampedArray(4 * 4 * 4);

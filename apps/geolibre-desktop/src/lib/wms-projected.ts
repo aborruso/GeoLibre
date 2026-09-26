@@ -75,7 +75,7 @@ function resolveProjection(code: string): Promise<Projection | null> {
       const converter = proj4("EPSG:4326", definition.replace(/\+axis=\w+\s*/g, "").trim());
       return {
         forward: (lonLat: Point) => converter.forward(lonLat) as Point,
-        northFirst: /\+axis=ne\b/.test(definition),
+        northFirst: /\+axis=ne/.test(definition),
       };
     })().catch((error) => {
       console.warn(`Could not resolve WMS CRS ${code} to a projection`, error);
@@ -266,7 +266,9 @@ export async function projectedTileToMercator(
       pixels,
       bitmap.width,
       bitmap.height,
-      sourcePixelMap(request),
+      // Map onto the image actually returned: a server that caps WIDTH/HEIGHT
+      // still covers the requested extent, at a lower resolution.
+      sourcePixelMap({ ...request, width: bitmap.width, height: bitmap.height }),
       tileSize,
     );
     const tile = new OffscreenCanvas(tileSize, tileSize);
