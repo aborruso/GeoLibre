@@ -69,7 +69,7 @@ function resolveProjection(code: string): Promise<Projection | null> {
       // ProjectedCSTypeGeoKey too (EPSG:4269 gives +proj=longlat).
       // tests/wms-projected.test.ts covers both kinds, so a dependency bump
       // that changes this fails there.
-      const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) } as never);
+      const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) });
       const definition = resolved.proj4 ?? "";
       if (!definition || resolved.errors?.CRSNotSupported) return null;
       const converter = proj4("EPSG:4326", definition.replace(/\+axis=\w+\s*/g, "").trim());
