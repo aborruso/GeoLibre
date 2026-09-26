@@ -82,3 +82,17 @@ test("an aborted tile request is not retried", async () => {
   );
   assert.equal(calls(), 1);
 });
+
+test("the default wait ends as soon as the tile request is aborted", async () => {
+  const controller = new AbortController();
+  const { fetchOnce, calls } = queuedFetch([FAILED_500, { data: "tile" }]);
+  setTimeout(() => controller.abort(), 20);
+  const started = Date.now();
+
+  await assert.rejects(
+    fetchTileWithRetry(fetchOnce, { signal: controller.signal, delaysMs: [10_000] }),
+    (error) => error === FAILED_500,
+  );
+  assert.ok(Date.now() - started < 1_000);
+  assert.equal(calls(), 1);
+});

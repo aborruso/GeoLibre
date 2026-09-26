@@ -29,10 +29,21 @@ export interface TileRetryOptions {
   /** Aborted when MapLibre no longer needs the tile: stop retrying. */
   signal?: AbortSignal;
   delaysMs?: readonly number[];
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Waits `ms`, or less if `signal` aborts first, so an abandoned tile is dropped at once. */
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
 
 /**
  * Runs `fetchOnce`, retrying after each delay while it fails with a retryable
@@ -50,7 +61,7 @@ export async function fetchTileWithRetry<T>(
       const status = tileErrorStatus(error);
       const retryable = status !== null && isRetryableTileStatus(status);
       if (!retryable || attempt >= delaysMs.length || signal?.aborted) throw error;
-      await sleep(delaysMs[attempt]);
+      await sleep(delaysMs[attempt], signal);
       if (signal?.aborted) throw error;
     }
   }
