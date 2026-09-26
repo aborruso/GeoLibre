@@ -4,6 +4,7 @@ import { addProtocol, type RequestParameters } from "maplibre-gl";
 import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
 import { isHttpWmsUrl, nativeWmsTileUrl, WMS_TILE_PROTOCOL } from "./native-wms-url";
 import { geographicTileToMercator, geographicWmsRequest } from "./wms-geographic";
+import { projectedTileToMercator, projectedWmsRequest } from "./wms-projected";
 import { sanitizeAttributionHtml } from "./sanitize-html";
 import { fetchTileWithRetry } from "./tile-retry";
 import { isTauri } from "./tauri-io";
@@ -97,12 +98,20 @@ async function fetchNativeWmsTile(
   // A WMS without EPSG:3857 is stored with a geographic SRS/CRS: fetch the
   // tile's lon/lat extent in that CRS and redraw it into Web Mercator.
   const geographic = geographicWmsRequest(url);
-  // Every EPSG:3857 tile takes this path. A geographic one that cannot be
-  // converted (e.g. a degenerate BBOX) is sent as is, so the server's own
-  // exception reaches the diagnostics panel instead of a client-side guess.
-  if (!geographic) return fetchNativeTile(url, signal);
-  const { data } = await fetchNativeTile(geographic.url, signal);
-  return { data: await geographicTileToMercator(data, geographic) };
+  if (geographic) {
+    const { data } = await fetchNativeTile(geographic.url, signal);
+    return { data: await geographicTileToMercator(data, geographic) };
+  }
+  // A projected CRS (UTM, a national grid) is requested over an extent that
+  // covers the tile and warped into Web Mercator.
+  const projected = await projectedWmsRequest(url);
+  // Every EPSG:3857 tile takes this path. One in another CRS that cannot be
+  // converted (an unknown EPSG code, a degenerate BBOX) is sent as is, so the
+  // server's own exception reaches the diagnostics panel instead of a
+  // client-side guess.
+  if (!projected) return fetchNativeTile(url, signal);
+  const { data } = await fetchNativeTile(projected.url, signal);
+  return { data: await projectedTileToMercator(data, projected) };
 }
 
 async function fetchNativeTile(url: string, signal: AbortSignal): Promise<{ data: ArrayBuffer }> {

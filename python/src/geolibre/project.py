@@ -1380,13 +1380,17 @@ def _normalize_wms_version(version: str | None) -> str:
     return "1.3.0" if version.strip().startswith("1.3") else "1.1.1"
 
 
-#: CRSs a WMS layer can be requested in. MapLibre tiles are Web Mercator; the
-#: geographic ones are for servers without EPSG:3857, which the desktop app
-#: requests per tile in that CRS and redraws into Web Mercator. Keep in step with
-#: `GEOGRAPHIC_WMS_CRS` in `apps/geolibre-desktop/src/lib/wms-geographic.ts`:
-#: a geographic CRS accepted here but missing there renders blank, and
-#: `tests/wms-geographic.test.ts` fails when the two drift.
+#: Web Mercator and the geographic CRSs a WMS layer can be requested in.
+#: MapLibre tiles are Web Mercator; the geographic ones are for servers without
+#: EPSG:3857, which the desktop app requests per tile in that CRS and redraws
+#: into Web Mercator strip by strip. Keep in step with `GEOGRAPHIC_WMS_CRS` in
+#: `apps/geolibre-desktop/src/lib/wms-geographic.ts`: a geographic CRS accepted
+#: here but missing there takes the projected path, and
+#: `tests/wms-geographic.test.ts` fails when the two drift. Any other
+#: ``EPSG:<code>`` is accepted too, as a projected CRS (see `_normalize_wms_crs`).
 WMS_CRS = frozenset({"EPSG:3857", "EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"})
+
+_EPSG_CODE = re.compile(r"EPSG:\d{4,6}")
 
 
 def _normalize_wms_crs(crs: str | None) -> str:
@@ -1399,13 +1403,19 @@ def _normalize_wms_crs(crs: str | None) -> str:
         The upper-cased code, ``"EPSG:3857"`` for None.
 
     Raises:
-        ValueError: If ``crs`` is not one of :data:`WMS_CRS`.
+        ValueError: If ``crs`` is neither one of :data:`WMS_CRS` nor an
+            ``EPSG:<code>``.
     """
     if crs is None:
         return "EPSG:3857"
     code = str(crs).strip().upper()
-    if code not in WMS_CRS:
-        raise ValueError(f"crs must be one of {sorted(WMS_CRS)}, got {crs!r}")
+    # A projected CRS (UTM, a national grid) is resolved by the desktop app
+    # from its EPSG tables; a code it does not know is sent to the server as is.
+    if code not in WMS_CRS and not _EPSG_CODE.fullmatch(code):
+        raise ValueError(
+            f"crs must be one of {sorted(WMS_CRS)} or an EPSG code such as 'EPSG:25832', "
+            f"got {crs!r}"
+        )
     return code
 
 
@@ -1442,12 +1452,13 @@ def wms_layer(
             only one version. EPSG:3857 keeps its axis order in both, so the
             BBOX template is unchanged. None falls back to ``"1.1.1"``.
         crs: The CRS tiles are requested in: ``"EPSG:3857"`` (None, the
-            default) or, for a server that does not offer Web Mercator, a
-            geographic CRS it does list in its capabilities (``"EPSG:4326"``,
-            ``"EPSG:4258"``, ``"EPSG:6706"``, ``"CRS:84"``). The desktop app
-            requests each tile's lon/lat extent in that CRS and redraws it
-            into Web Mercator; the web build still sends the Web Mercator
-            BBOX, which such a server rejects.
+            default) or, for a server that does not offer Web Mercator, a CRS
+            it does list in its capabilities: a geographic one
+            (``"EPSG:4326"``, ``"EPSG:4258"``, ``"EPSG:6706"``, ``"CRS:84"``)
+            or a projected ``"EPSG:<code>"`` such as ``"EPSG:25832"``. The
+            desktop app requests each tile's extent in that CRS and redraws
+            or warps it into Web Mercator; the web build still sends the Web
+            Mercator BBOX, which such a server rejects.
         bounds: Optional ``[west, south, east, north]`` request bounds, in
             WGS84. Take them from the service's ``EX_GeographicBoundingBox``,
             which is always lon/lat, rather than a 1.3.0 ``BoundingBox
@@ -1459,8 +1470,8 @@ def wms_layer(
 
     Raises:
         ValueError: If ``bounds`` is not four finite numbers with valid latitudes,
-            ``crs`` is not one of :data:`WMS_CRS`, or ``crs`` is ``"CRS:84"``
-            with a version other than 1.3.0.
+            ``crs`` is neither one of :data:`WMS_CRS` nor an ``EPSG:<code>``,
+            or ``crs`` is ``"CRS:84"`` with a version other than 1.3.0.
     """
     wms_version = _normalize_wms_version(version)
     wms_crs = _normalize_wms_crs(crs)

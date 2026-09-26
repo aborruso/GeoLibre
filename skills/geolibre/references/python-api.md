@@ -55,8 +55,9 @@ m.add_ee_layer(ee_object, vis_params=None, name="Earth Engine", shown=True,
 m.add_pmtiles(url, name, tile_type="vector", source_layers=None)
 m.add_vector_tiles(url, name, source_layers=None)
 m.add_wms(endpoint, layers, name, version="1.1.1", crs=None, bounds=None)
-# crs: EPSG:3857 by default; for a server without it, EPSG:4326/4258/6706, or
-# CRS:84 with version="1.3.0"; drawn only by the desktop app (blank on the web)
+# crs: EPSG:3857 by default; for a server without it, EPSG:4326/4258/6706,
+# CRS:84 with version="1.3.0", or a projected EPSG:<code> such as EPSG:25832;
+# drawn only by the desktop app (blank on the web)
 m.add_wmts(endpoint, name, bounds=None)
 m.add_wfs(endpoint, type_name, max_features=1000)
 m.add_3d_tiles(url, name, altitude_offset=0)          # or ion_asset_id=96188 (3D globe only)

@@ -31,16 +31,16 @@ export interface StripPlacement {
   targetHeight: number;
 }
 
-function queryParam(params: URLSearchParams, name: string): [string, string] | null {
+export function queryParam(params: URLSearchParams, name: string): [string, string] | null {
   for (const [key, value] of params) if (key.toLowerCase() === name) return [key, value];
   return null;
 }
 
-function longitudeFromMercatorX(x: number): number {
+export function longitudeFromMercatorX(x: number): number {
   return (x / WEB_MERCATOR_HALF_WORLD) * 180;
 }
 
-function latitudeFromMercatorY(y: number): number {
+export function latitudeFromMercatorY(y: number): number {
   return (Math.atan(Math.sinh((y / WEB_MERCATOR_HALF_WORLD) * Math.PI)) * 180) / Math.PI;
 }
 

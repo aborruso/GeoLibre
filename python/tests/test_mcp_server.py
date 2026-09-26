@@ -744,7 +744,7 @@ def test_add_ogc_layer_rejects_an_unsupported_crs(server, project_path):
         service="wms",
         endpoint="https://example.com/wms",
         layers="CP.CadastralParcel",
-        crs="EPSG:25833",
+        crs="UTM32",
     )
 
 

@@ -292,10 +292,21 @@ def test_wms_layer_rejects_crs84_outside_wms_1_3_0():
     assert project.wms_layer("x", "https://e/wms", "a", version="1.3.0", crs="crs:84")
 
 
-def test_wms_layer_rejects_a_crs_the_desktop_cannot_redraw():
-    # A projected CRS would need a real reprojection, not a strip redraw.
-    with pytest.raises(ValueError, match="crs must be one of"):
-        project.wms_layer("x", "https://e/wms", "a", crs="EPSG:25833")
+def test_wms_layer_accepts_a_projected_epsg_crs():
+    # The desktop app warps a projected CRS (UTM, a national grid) into Web
+    # Mercator, so any EPSG code is written into the template as given.
+    for crs, version, key in (("epsg:25833", "1.1.1", "SRS"), ("EPSG:6707", "1.3.0", "CRS")):
+        tile = project.wms_layer("x", "https://e/wms", "a", version=version, crs=crs)["source"][
+            "tiles"
+        ][0]
+        assert f"{key}={crs.upper().replace(':', '%3A')}" in tile
+        assert "BBOX={bbox-epsg-3857}" in tile
+
+
+def test_wms_layer_rejects_a_crs_that_is_not_an_epsg_code():
+    for crs in ("UTM32", "EPSG:abc", "EPSG:12", "ESRI:102091"):
+        with pytest.raises(ValueError, match="crs must be one of"):
+            project.wms_layer("x", "https://e/wms", "a", crs=crs)
 
 
 def test_wms_layer_transparent_false():

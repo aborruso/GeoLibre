@@ -2385,10 +2385,11 @@ class Map(anywidget.AnyWidget):
                 ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
                 some servers accept only one version.
             crs: The CRS tiles are requested in, ``"EPSG:3857"`` when None.
-                For a server without Web Mercator, a geographic CRS it lists
-                (``"EPSG:4326"``, ``"EPSG:4258"``, ``"EPSG:6706"``,
-                ``"CRS:84"``): the desktop app redraws those tiles into Web
-                Mercator.
+                For a server without Web Mercator, a CRS it lists: a
+                geographic one (``"EPSG:4326"``, ``"EPSG:4258"``,
+                ``"EPSG:6706"``, ``"CRS:84"``) or a projected
+                ``"EPSG:<code>"`` such as ``"EPSG:25832"``. The desktop app
+                redraws those tiles into Web Mercator.
             bounds: Optional ``[west, south, east, north]`` request bounds, in
                 WGS84. A WMS layer has no geometry to derive an extent from,
                 so without these "zoom to layer" cannot reach it.

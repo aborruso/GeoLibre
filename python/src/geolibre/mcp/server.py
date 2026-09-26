@@ -577,10 +577,12 @@ def build_server(workspace: Workspace) -> MCPServer:
             version: WMS protocol version, e.g. `1.1.1` or `1.3.0`.
             crs: The CRS WMS tiles are requested in; `EPSG:3857` when
                 omitted. Check the capabilities first: if the layer does not
-                list EPSG:3857, pass a geographic CRS it does list
-                (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, `CRS:84`). The
-                desktop app redraws those tiles into Web Mercator; the web
-                build and `export_html` pages cannot show them.
+                list EPSG:3857, pass a CRS it does list, preferably a
+                geographic one (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`,
+                `CRS:84`), otherwise a projected `EPSG:<code>` such as
+                `EPSG:25832`. The desktop app redraws those tiles into Web
+                Mercator; the web build and `export_html` pages cannot show
+                them.
             bounds: The layer's extent as `[west, south, east, north]` in
                 WGS84. A service layer has no geometry to derive it from, so
                 without this "zoom to layer" cannot reach it. Read it from the

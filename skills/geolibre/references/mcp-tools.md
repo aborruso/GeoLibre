@@ -91,9 +91,11 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   WMS tiles are requested in, `EPSG:3857` when omitted: check that the layer
   lists it in the capabilities, because a server without Web Mercator answers
   every tile with an XML exception and the layer stays blank. For such a
-  server pass a geographic CRS it does list (`EPSG:4326`, `EPSG:4258`,
-  `EPSG:6706`, or `CRS:84` with `version="1.3.0"`): the desktop app redraws those tiles into Web
-  Mercator, while the web build and `export_html` pages cannot show them.
+  server pass a CRS it does list, preferably a geographic one (`EPSG:4326`,
+  `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version="1.3.0"`), otherwise a
+  projected `EPSG:<code>` such as `EPSG:25832`: the desktop app redraws or
+  warps those tiles into Web Mercator, while the web build and `export_html`
+  pages cannot show them.
 
 ### Editing
 
