@@ -5,6 +5,7 @@ import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
 import { isHttpWmsUrl, nativeWmsTileUrl, WMS_TILE_PROTOCOL } from "./native-wms-url";
 import { geographicTileToMercator, geographicWmsRequest } from "./wms-geographic";
 import { sanitizeAttributionHtml } from "./sanitize-html";
+import { fetchTileWithRetry } from "./tile-retry";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
@@ -80,34 +81,42 @@ export async function resolveXyzTileUrlTemplate(
 export function registerXyzTileProtocol(): void {
   if (protocolRegistered || !isTauri()) return;
 
-  addProtocol(XYZ_TILE_PROTOCOL, async (request) => fetchNativeTile(parseXyzTileRequest(request)));
-  addProtocol(WMS_TILE_PROTOCOL, async (request) =>
-    fetchNativeWmsTile(parseWmsTileRequest(request)),
+  addProtocol(XYZ_TILE_PROTOCOL, async (request, abortController) =>
+    fetchNativeTile(parseXyzTileRequest(request), abortController.signal),
+  );
+  addProtocol(WMS_TILE_PROTOCOL, async (request, abortController) =>
+    fetchNativeWmsTile(parseWmsTileRequest(request), abortController.signal),
   );
   protocolRegistered = true;
 }
 
-async function fetchNativeWmsTile(url: string): Promise<{ data: ArrayBuffer }> {
+async function fetchNativeWmsTile(
+  url: string,
+  signal: AbortSignal,
+): Promise<{ data: ArrayBuffer }> {
   // A WMS without EPSG:3857 is stored with a geographic SRS/CRS: fetch the
   // tile's lon/lat extent in that CRS and redraw it into Web Mercator.
   const geographic = geographicWmsRequest(url);
   // Every EPSG:3857 tile takes this path. A geographic one that cannot be
   // converted (e.g. a degenerate BBOX) is sent as is, so the server's own
   // exception reaches the diagnostics panel instead of a client-side guess.
-  if (!geographic) return fetchNativeTile(url);
-  const { data } = await fetchNativeTile(geographic.url);
+  if (!geographic) return fetchNativeTile(url, signal);
+  const { data } = await fetchNativeTile(geographic.url, signal);
   return { data: await geographicTileToMercator(data, geographic) };
 }
 
-async function fetchNativeTile(url: string): Promise<{ data: ArrayBuffer }> {
+async function fetchNativeTile(url: string, signal: AbortSignal): Promise<{ data: ArrayBuffer }> {
   // This handler runs once per tile, so — unlike the one-shot native calls
   // routed through native-http — it deliberately calls `invoke` directly and
   // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
   // edge returns 404s in bulk, and recording each would re-render the panel
   // per tile and evict more relevant entries from the 500-record ring buffer.
-  const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-    url,
-  });
+  // A transient 5xx or 429 is retried: MapLibre would not ask for the tile
+  // again until the view changes.
+  const bytes = await fetchTileWithRetry(
+    () => invoke<number[] | Uint8Array>("fetch_url_bytes", { url }),
+    { signal },
+  );
   const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return { data: array.slice().buffer };
 }
