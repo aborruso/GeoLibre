@@ -1478,6 +1478,8 @@ fn fetch_url_bytes_blocking(
         .map_err(|error| request_error_message(&error))?;
     let status = response.status();
     if !status.is_success() {
+        // Keep this wording: `tileErrorStatus` in `src/lib/tile-retry.ts` reads
+        // the status from it to decide whether a tile is retried.
         return Err(format!("Request failed with status {status}"));
     }
 

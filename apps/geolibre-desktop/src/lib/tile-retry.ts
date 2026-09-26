@@ -11,8 +11,8 @@ export const TILE_RETRY_DELAYS_MS = [250, 750] as const;
 
 /**
  * The HTTP status in a failed `fetch_url_bytes` call, whose error reads
- * "Request failed with status 500 Internal Server Error", or null when the
- * request never got a response (DNS, TLS, timeout, blocked URL).
+ * "Request failed with status 500 Internal Server Error" (`lib.rs`), or null
+ * when the request never got a response (DNS, TLS, timeout, blocked URL).
  */
 export function tileErrorStatus(error: unknown): number | null {
   const message = error instanceof Error ? error.message : String(error);
@@ -30,6 +30,16 @@ export interface TileRetryOptions {
   signal?: AbortSignal;
   delaysMs?: readonly number[];
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** Source of the jitter, a number in [0, 1). */
+  random?: () => number;
+}
+
+/**
+ * Spreads a delay over ±25%, so tiles that failed together under load do not
+ * all retry at the same instant.
+ */
+export function jitteredDelay(ms: number, random: () => number = Math.random): number {
+  return Math.round(ms * (0.75 + random() * 0.5));
 }
 
 /** Waits `ms`, or less if `signal` aborts first, so an abandoned tile is dropped at once. */
@@ -52,7 +62,12 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
  */
 export async function fetchTileWithRetry<T>(
   fetchOnce: () => Promise<T>,
-  { signal, delaysMs = TILE_RETRY_DELAYS_MS, sleep = wait }: TileRetryOptions = {},
+  {
+    signal,
+    delaysMs = TILE_RETRY_DELAYS_MS,
+    sleep = wait,
+    random = Math.random,
+  }: TileRetryOptions = {},
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -61,7 +76,7 @@ export async function fetchTileWithRetry<T>(
       const status = tileErrorStatus(error);
       const retryable = status !== null && isRetryableTileStatus(status);
       if (!retryable || attempt >= delaysMs.length || signal?.aborted) throw error;
-      await sleep(delaysMs[attempt], signal);
+      await sleep(jitteredDelay(delaysMs[attempt], random), signal);
       if (signal?.aborted) throw error;
     }
   }
