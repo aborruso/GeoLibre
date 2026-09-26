@@ -1387,7 +1387,8 @@ def _normalize_wms_version(version: str | None) -> str:
 #: `apps/geolibre-desktop/src/lib/wms-geographic.ts`: a geographic CRS accepted
 #: here but missing there takes the projected path, and
 #: `tests/wms-geographic.test.ts` fails when the two drift. Any other
-#: ``EPSG:<code>`` is accepted too, as a projected CRS (see `_normalize_wms_crs`).
+#: ``EPSG:<code>`` is accepted too, projected or geographic, and warped by the
+#: desktop app (see `_normalize_wms_crs`).
 WMS_CRS = frozenset({"EPSG:3857", "EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"})
 
 _EPSG_CODE = re.compile(r"EPSG:\d{4,6}")
@@ -1409,8 +1410,9 @@ def _normalize_wms_crs(crs: str | None) -> str:
     if crs is None:
         return "EPSG:3857"
     code = str(crs).strip().upper()
-    # A projected CRS (UTM, a national grid) is resolved by the desktop app
-    # from its EPSG tables; a code it does not know is sent to the server as is.
+    # Any other EPSG CRS (UTM, a national grid, another geographic datum) is
+    # resolved by the desktop app from its EPSG tables; a code it does not know
+    # is sent to the server as is.
     if code not in WMS_CRS and not _EPSG_CODE.fullmatch(code):
         raise ValueError(
             f"crs must be one of {sorted(WMS_CRS)} or an EPSG code such as 'EPSG:25832', "

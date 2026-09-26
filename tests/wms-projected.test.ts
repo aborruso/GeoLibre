@@ -96,6 +96,27 @@ test("projectedWmsRequest leaves Web Mercator, geographic and unknown CRSs alone
   assert.equal(await projectedWmsRequest(getMap("1.1.1", "EPSG:25832", [1, 1, 1, 1])), null);
 });
 
+test("a geographic EPSG code outside the strip path is warped in degrees", async () => {
+  // EPSG:4269 (NAD83): latitude first in WMS 1.3.0, longitude first in 1.1.1.
+  const [lon0, lat0] = lonLat(TILE[0], TILE[1]);
+  const [lon1, lat1] = lonLat(TILE[2], TILE[3]);
+  const newVersion = await projectedWmsRequest(getMap("1.3.0", "EPSG:4269"));
+  assert.ok(newVersion);
+  const [minLon, minLat, maxLon, maxLat] = newVersion.extent;
+  for (const [actual, expected] of [
+    [minLon, lon0],
+    [minLat, lat0],
+    [maxLon, lon1],
+    [maxLat, lat1],
+  ]) {
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ${expected}`);
+  }
+  assert.deepEqual(bboxOf(newVersion.url), [minLat, minLon, maxLat, maxLon]);
+  const oldVersion = await projectedWmsRequest(getMap("1.1.1", "EPSG:4269"));
+  assert.ok(oldVersion);
+  assert.deepEqual(bboxOf(oldVersion.url), [minLon, minLat, maxLon, maxLat]);
+});
+
 test("sourcePixelMap matches a direct reprojection of every sampled pixel", async () => {
   const request = await projectedWmsRequest(getMap("1.1.1", "EPSG:25832"));
   assert.ok(request);

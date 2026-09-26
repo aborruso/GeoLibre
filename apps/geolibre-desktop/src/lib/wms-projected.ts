@@ -3,7 +3,9 @@
 // such a CRS (`SRS=EPSG:25832&BBOX={bbox-epsg-3857}`), the desktop tile
 // protocol asks for an extent in that CRS covering the tile and warps the image
 // into Web Mercator pixel by pixel, the way a GeoTIFF in a projected CRS is
-// reprojected. Geographic CRSs take the cheaper strip path in wms-geographic.ts.
+// reprojected. The geographic CRSs in GEOGRAPHIC_WMS_CRS take the cheaper strip
+// path in wms-geographic.ts; any other geographic EPSG code (e.g. EPSG:4269) is
+// warped here, in degrees.
 
 import proj4 from "proj4";
 import {
@@ -50,9 +52,8 @@ export interface ProjectedWmsRequest {
 const projections = new Map<string, Promise<Projection | null>>();
 
 /**
- * The projection for an `EPSG:n` projected CRS, resolved offline from the EPSG
- * tables in geotiff-geokeys-to-proj4, or null when the code is unknown or is
- * not a projected CRS.
+ * The projection for an `EPSG:n` CRS, resolved offline from the EPSG tables in
+ * geotiff-geokeys-to-proj4, or null when the code is unknown.
  */
 function resolveProjection(code: string): Promise<Projection | null> {
   let projection = projections.get(code);
@@ -63,15 +64,16 @@ function resolveProjection(code: string): Promise<Projection | null> {
       const { toProj4 } = await import("geotiff-geokeys-to-proj4");
       const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) } as never);
       const definition = resolved.proj4 ?? "";
-      if (!definition || resolved.errors?.CRSNotSupported || /\+proj=longlat\b/.test(definition)) {
-        return null;
-      }
+      if (!definition || resolved.errors?.CRSNotSupported) return null;
       const converter = proj4("EPSG:4326", definition.replace(/\+axis=\w+\s*/g, "").trim());
       return {
         forward: (lonLat: Point) => converter.forward(lonLat) as Point,
         northFirst: /\+axis=ne\b/.test(definition),
       };
-    })().catch(() => null);
+    })().catch((error) => {
+      console.warn(`Could not resolve WMS CRS ${code} to a projection`, error);
+      return null;
+    });
     projections.set(code, projection);
   }
   return projection;
@@ -82,10 +84,10 @@ function distance([x1, y1]: Point, [x2, y2]: Point): number {
 }
 
 /**
- * Rewrite a concrete GetMap tile URL whose SRS/CRS is a projected CRS but whose
- * BBOX MapLibre filled in Web Mercator metres. Returns null for Web Mercator,
- * geographic CRSs and CRSs that cannot be resolved, which are then fetched as
- * they are.
+ * Rewrite a concrete GetMap tile URL whose SRS/CRS is an EPSG CRS other than
+ * Web Mercator but whose BBOX MapLibre filled in Web Mercator metres. Returns
+ * null for Web Mercator, the geographic CRSs of the strip path and CRSs that
+ * cannot be resolved, which are then fetched as they are.
  */
 export async function projectedWmsRequest(url: string): Promise<ProjectedWmsRequest | null> {
   let parsed: URL;
