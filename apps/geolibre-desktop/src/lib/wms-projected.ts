@@ -7,7 +7,6 @@
 // path in wms-geographic.ts; any other geographic EPSG code (e.g. EPSG:4269) is
 // warped here, in degrees.
 
-import proj4 from "proj4";
 import {
   describeWmsFailure,
   GEOGRAPHIC_WMS_CRS,
@@ -16,7 +15,7 @@ import {
   queryParam,
 } from "./wms-geographic";
 
-/** Points sampled on each tile edge to find the extent that covers it. */
+/** Segments each tile edge is split into (EDGE_SAMPLES + 1 points) to find the extent that covers it. */
 const EDGE_SAMPLES = 8;
 /** Cells per side of the grid reprojected exactly; pixels in between are interpolated. */
 const WARP_GRID = 16;
@@ -61,7 +60,15 @@ function resolveProjection(code: string): Promise<Projection | null> {
     projection = (async () => {
       const epsg = /^EPSG:(\d{4,6})$/.exec(code);
       if (!epsg) return null;
-      const { toProj4 } = await import("geotiff-geokeys-to-proj4");
+      // Both loaded on first use, so a session without such a layer never pays for them.
+      const [{ toProj4 }, { default: proj4 }] = await Promise.all([
+        import("geotiff-geokeys-to-proj4"),
+        import("proj4"),
+      ]);
+      // geotiff-geokeys-to-proj4 resolves geographic codes through
+      // ProjectedCSTypeGeoKey too (EPSG:4269 gives +proj=longlat).
+      // tests/wms-projected.test.ts covers both kinds, so a dependency bump
+      // that changes this fails there.
       const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) } as never);
       const definition = resolved.proj4 ?? "";
       if (!definition || resolved.errors?.CRSNotSupported) return null;
@@ -74,6 +81,8 @@ function resolveProjection(code: string): Promise<Projection | null> {
       console.warn(`Could not resolve WMS CRS ${code} to a projection`, error);
       return null;
     });
+    // A failure is cached like an unknown code: both packages are bundled, so
+    // an import error is not transient.
     projections.set(code, projection);
   }
   return projection;
