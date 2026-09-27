@@ -13,11 +13,11 @@ import {
   defaultWmsCrs,
   fetchWmsCapabilities,
   isServiceFormUrl,
-  normalizeWmsCrs,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
   stripOgcOperationParams,
   wmsCrsChoices,
+  usableWmsCrs,
   wmsLayersAdvertiseCrs,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
@@ -145,12 +145,7 @@ export function WmsSource({
     : advertisedCrs;
   // A pick the WMS version cannot request (CRS:84 with 1.1.1) falls back to
   // Web Mercator, like a pick the selected layers do not offer.
-  let validPick = "EPSG:3857";
-  try {
-    validPick = normalizeWmsCrs(wmsCrsPick || undefined, wmsVersion);
-  } catch {
-    // Keep EPSG:3857.
-  }
+  const validPick = usableWmsCrs(wmsCrsPick, wmsVersion) ?? "EPSG:3857";
   // Keep the pick when the choices are unknown (layers typed by hand, a saved
   // service); when the capabilities list the selected layers' CRSs, keep it
   // only if they offer it, else fall back to their default.

@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   defaultWmsCrs,
   parseWmsCapabilities,
+  usableWmsCrs,
   wmsCrsChoices,
   wmsLayersAdvertiseCrs,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/helpers";
@@ -103,6 +104,14 @@ describe("WMS capabilities CRS", () => {
     assert.equal(wmsLayersAdvertiseCrs(layers, "roads,typed_by_hand"), false);
     assert.equal(wmsLayersAdvertiseCrs(layers, ""), false);
     assert.equal(wmsLayersAdvertiseCrs([{ name: "a", title: "a", crs: [] }], "a"), false);
+  });
+
+  it("drops a saved CRS the WMS version cannot request", () => {
+    assert.equal(usableWmsCrs("epsg:25832", "1.1.1"), "EPSG:25832");
+    assert.equal(usableWmsCrs("CRS:84", "1.3.0"), "CRS:84");
+    assert.equal(usableWmsCrs("CRS:84", "1.1.1"), undefined);
+    assert.equal(usableWmsCrs("not a crs", "1.3.0"), undefined);
+    assert.equal(usableWmsCrs(undefined, "1.3.0"), undefined);
   });
 
   it("defaults to Web Mercator, else a geographic CRS, else the first code", () => {

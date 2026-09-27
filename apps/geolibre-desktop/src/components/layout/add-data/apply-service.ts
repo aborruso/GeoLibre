@@ -37,6 +37,7 @@ import {
   normalizeWmsCrs,
   normalizeWmsVersion,
   stripOgcOperationParams,
+  usableWmsCrs,
   wmsVersionFromEndpoint,
 } from "./helpers";
 import {
@@ -506,7 +507,9 @@ export async function applyServiceEntry(
       // and only a code its EPSG tables can resolve; anything else keeps Web
       // Mercator, including every saved CRS in the web build.
       const { reprojectableWmsCrs } = await import("../../../lib/wms-projected");
-      const crs = isTauri() ? await reprojectableWmsCrs(params.crs) : undefined;
+      const crs = isTauri()
+        ? await reprojectableWmsCrs(usableWmsCrs(params.crs, params.version))
+        : undefined;
       const wmsParams = { ...params, crs };
       addLayer(routeWmsLayerThroughNativeProtocol(buildWmsLayer(wmsParams)), beforeLayerId);
       return;

@@ -221,6 +221,20 @@ export function normalizeWmsCrs(crs: unknown, version: unknown): string {
   return code;
 }
 
+/**
+ * `crs` normalized by {@link normalizeWmsCrs} when `version` can request it,
+ * else undefined (Web Mercator): a saved or hand-edited service may pair
+ * CRS:84 with WMS 1.1.1, or carry a code that is not a CRS at all.
+ */
+export function usableWmsCrs(crs: string | undefined, version: unknown): string | undefined {
+  if (!crs) return undefined;
+  try {
+    return normalizeWmsCrs(crs, version);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createWmsTileUrl(options: {
   endpoint: string;
   layers: string;
