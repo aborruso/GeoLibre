@@ -135,11 +135,12 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
  * What {@link GeoLibreAppAPI.importLayerStyle} did. `warnings` lists what the
  * style asked for that GeoLibre could not represent. On failure, `invalid`
  * means the text is not a style in any format read, `no-match` that it parsed
- * but describes no symbology the layer can wear.
+ * but describes no symbology the layer can wear, `unsupported-layer` that the
+ * layer is not a vector layer (only GeoJSON and vector-tile layers take one).
  */
 export type GeoLibreImportLayerStyleResult =
   | { ok: true; warnings: string[] }
-  | { ok: false; reason: "invalid" | "no-match"; warnings: string[] };
+  | { ok: false; reason: "invalid" | "no-match" | "unsupported-layer"; warnings: string[] };
 
 /** Overture Maps themes available through the host's official PMTiles source. */
 export type GeoLibreOvertureTheme = OvertureTheme;
@@ -442,7 +443,9 @@ export interface GeoLibreAppAPI {
    * Apply a style written in another format to a layer, like the Layers
    * panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON,
    * detected from the content. The style is merged over the layer's current
-   * one and saved with the project. Accepts any layer id, not only the
+   * one and saved with the project. Only GeoJSON and vector-tile layers take a
+   * style, as in the Layers panel; any other layer is left untouched with
+   * `reason: "unsupported-layer"`. Accepts any such layer id, not only the
    * plugin's own; throws for an unknown id.
    *
    * Lets a plugin that adds features from a web service dress them as the

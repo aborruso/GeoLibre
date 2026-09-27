@@ -603,7 +603,7 @@ These methods are typed optional for forward-compatibility with host variants, s
 
 ## Layer styles
 
-`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. It accepts any layer id and throws for an unknown one.
+`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
 
 A plugin that adds features from a web service can dress them as the service does. A GeoServer, for example, returns a layer's SLD for WMS `GetStyles`:
 
@@ -614,7 +614,7 @@ const result = app.importLayerStyle?.(layerId, sld);
 if (result && !result.ok) console.warn(`Style not applied (${result.reason})`, result.warnings);
 ```
 
-`result.warnings` lists what the style asked for that GeoLibre could not represent. On failure, `reason` is `invalid` when the text is not a style in any format read, `no-match` when it parsed but describes no symbology the layer can wear; the layer is left untouched.
+`result.warnings` lists what the style asked for that GeoLibre could not represent. On failure, `reason` is `invalid` when the text is not a style in any format read, `no-match` when it parsed but describes no symbology the layer can wear, `unsupported-layer` when the layer is not a vector layer; the layer is left untouched.
 
 ## Raster and tile layers
 

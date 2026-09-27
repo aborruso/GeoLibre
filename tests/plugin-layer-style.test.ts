@@ -68,6 +68,18 @@ describe("external plugin layer style API", () => {
     assert.deepEqual(styleOf(layerId), before);
   });
 
+  it("leaves a raster layer untouched, as the Layers panel import does", () => {
+    const layerId = useAppStore.getState().addTileLayer("Orthophoto", {
+      type: "wms",
+      tiles: ["https://x.test/wms?BBOX={bbox-epsg-3857}"],
+      url: "https://x.test/wms",
+    });
+    const before = styleOf(layerId);
+    const result = createPluginLayerStyleActions().importLayerStyle(layerId, SLD);
+    assert.deepEqual(result, { ok: false, reason: "unsupported-layer", warnings: [] });
+    assert.deepEqual(styleOf(layerId), before);
+  });
+
   it("throws for an unknown layer id", () => {
     assert.throws(
       () => createPluginLayerStyleActions().importLayerStyle("missing", SLD),
