@@ -169,6 +169,7 @@ import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { createPluginLayerGroupActions } from "../lib/plugin-layer-groups";
+import { createPluginLayerStyleActions } from "../lib/plugin-layer-style";
 import { createPluginLayerQueries } from "../lib/plugin-layer-queries";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -1172,6 +1173,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     },
     queryOvertureFeatures,
     ...createPluginLayerGroupActions(),
+    ...createPluginLayerStyleActions(),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getViewBounds: () => mapControllerRef?.current?.getViewBounds() ?? null,

@@ -115,6 +115,8 @@ export interface GeoLibreAppAPI {
   ) => string;
   listLayers?: () => GeoLibreLayerSummary[];
   getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  // Dress a layer with an SLD, QML or Mapbox GL style. See "Layer styles".
+  importLayerStyle?: (layerId: string, text: string) => GeoLibreImportLayerStyleResult;
   getSelectedFeatures?: () => Feature<Geometry | null>[];
   getSelectedLayerId?: () => string | null;
   // Sample a raster layer over a geographic window. See "Sampling raster
@@ -598,6 +600,21 @@ const roots = groups.filter((group) => group.parentId === null);
 Group visibility and opacity are **combined** with each child layer's own: a hidden group hides its children on the map without touching their individual `visible` flags, and group opacity multiplies into each child's. `removeLayerGroup` through this API removes only the folder, never its contents: the layers it held move to the panel root, and any groups nested inside it are reparented to the removed folder's own parent.
 
 These methods are typed optional for forward-compatibility with host variants, so call them with optional chaining.
+
+## Layer styles
+
+`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. It accepts any layer id and throws for an unknown one.
+
+A plugin that adds features from a web service can dress them as the service does. A GeoServer, for example, returns a layer's SLD for WMS `GetStyles`:
+
+```typescript
+const layerId = app.addGeoJsonLayer("Land cover", features);
+const sld = await (await fetch(`${wmsUrl}?service=WMS&version=1.1.1&request=GetStyles&layers=M5:L4`)).text();
+const result = app.importLayerStyle?.(layerId, sld);
+if (result && !result.ok) console.warn(`Style not applied (${result.reason})`, result.warnings);
+```
+
+`result.warnings` lists what the style asked for that GeoLibre could not represent. On failure, `reason` is `invalid` when the text is not a style in any format read, `no-match` when it parsed but describes no symbology the layer can wear; the layer is left untouched.
 
 ## Raster and tile layers
 
