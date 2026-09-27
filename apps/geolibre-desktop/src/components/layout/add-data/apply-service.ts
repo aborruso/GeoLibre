@@ -34,6 +34,7 @@ import {
   attributionForTileUrl,
   createBaseLayer,
   createWmsTileUrl,
+  normalizeWmsCrs,
   normalizeWmsVersion,
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
@@ -121,6 +122,8 @@ export interface WmsLayerParams {
   transparent: boolean;
   tileSize: string;
   version: string;
+  /** CRS of the requested tiles (default EPSG:3857); see {@link normalizeWmsCrs}. */
+  crs?: string;
 }
 
 /**
@@ -145,6 +148,7 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
     transparent: params.transparent,
     tileSize,
     version,
+    crs: normalizeWmsCrs(params.crs || undefined, version),
   });
   const attribution = attributionForTileUrl(tileUrl);
   return createBaseLayer(
@@ -183,6 +187,7 @@ export function wmsFieldsToParams(entry: ServiceLibraryEntry): WmsLayerParams {
     transparent: serviceFieldBoolean(fields, "transparent", true),
     tileSize: serviceFieldString(fields, "tileSize", "256"),
     version: normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"),
+    crs: serviceFieldString(fields, "crs"),
   };
 }
 

@@ -622,6 +622,11 @@ export interface WmsLayerOption {
   name: string;
   /** The layer's human-readable `<Title>`; falls back to the name if absent. */
   title: string;
+  /**
+   * The CRS codes the layer advertises (`<CRS>` in 1.3.0, `<SRS>` in 1.1.1),
+   * its own plus those inherited from its parent layers, upper-cased.
+   */
+  crs?: string[];
 }
 
 /**
@@ -702,9 +707,75 @@ export function parseWmsCapabilities(xmlText: string): WmsCapabilities {
     const name = directChildText(layer, "Name");
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    layers.push({ name, title: directChildText(layer, "Title") || name });
+    layers.push({
+      name,
+      title: directChildText(layer, "Title") || name,
+      crs: layerCrsCodes(layer),
+    });
   }
   return { layers, version: root.getAttribute("version") };
+}
+
+/**
+ * The CRS codes a `<Layer>` advertises: its own `<CRS>`/`<SRS>` elements plus
+ * those of its ancestor layers, which WMS child layers inherit. A 1.1.1 `<SRS>`
+ * may list several codes separated by spaces.
+ */
+function layerCrsCodes(layer: Element): string[] {
+  const codes = new Set<string>();
+  for (let node: Element | null = layer; node?.localName === "Layer"; node = node.parentElement) {
+    for (const child of Array.from(node.children)) {
+      if (child.localName !== "CRS" && child.localName !== "SRS") continue;
+      for (const code of (child.textContent ?? "").trim().split(/\s+/)) {
+        if (code) codes.add(code.toUpperCase());
+      }
+    }
+  }
+  return [...codes];
+}
+
+/**
+ * The CRS codes the Add WMS dialog can request for every layer of a
+ * comma-separated LAYERS value: those all the layers advertise, in the order
+ * of the first one, that {@link normalizeWmsCrs} accepts for `version`.
+ * EPSG:900913 is left out (an alias of EPSG:3857). Empty when a layer is not
+ * among `options` or advertises no CRS, e.g. layers typed by hand.
+ */
+export function wmsCrsChoices(
+  options: WmsLayerOption[],
+  layers: string,
+  version: string,
+): string[] {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return [];
+  let shared: string[] | null = null;
+  for (const name of names) {
+    const codes = options.find((option) => option.name === name)?.crs;
+    if (!codes || codes.length === 0) return [];
+    shared = shared ? shared.filter((code) => codes.includes(code)) : codes;
+  }
+  return (shared ?? []).filter((code) => {
+    if (code === "EPSG:900913") return false;
+    try {
+      normalizeWmsCrs(code, version);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * The CRS the dialog picks by default among `choices`: EPSG:3857 when offered
+ * (no reprojection), else a geographic CRS, else the first one; EPSG:3857 when
+ * there are no choices, as before the dialog offered any.
+ */
+export function defaultWmsCrs(choices: string[]): string {
+  if (choices.length === 0 || choices.includes("EPSG:3857")) return "EPSG:3857";
+  return choices.find((code) => GEOGRAPHIC_WMS_CRS.has(code)) ?? choices[0];
 }
 
 /**

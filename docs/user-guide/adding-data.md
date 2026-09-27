@@ -61,7 +61,7 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
 | --- | --- |
 | **XYZ Layer** | A raster or vector tile service using a `{z}/{x}/{y}` URL template. |
 | **[WCS Layer](../data-formats.md#wcs-raster-subsets)** | Downloads numerical GeoTIFF subsets from WCS 1.0.0 services. |
-| **WMS Layer** | A Web Map Service layer, with click-to-identify through GetFeatureInfo where supported. |
+| **WMS Layer** | A Web Map Service layer, with click-to-identify through GetFeatureInfo where supported. In the desktop app, once the layers are retrieved, a layer can be requested in any coordinate reference system it offers; the tiles are reprojected to Web Mercator. |
 | **WFS Layer** | A Web Feature Service layer, with optional automatic refresh. |
 | **WMTS Layer** | A Web Map Tile Service layer. |
 | **OGC API - Features** | An OGC API - Features endpoint; pick a collection and add it as a vector layer. |

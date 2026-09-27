@@ -10,10 +10,12 @@ import {
   GEBCO_WMS_LAYERS,
 } from "../constants";
 import {
+  defaultWmsCrs,
   fetchWmsCapabilities,
   isServiceFormUrl,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
+  wmsCrsChoices,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
@@ -38,6 +40,7 @@ interface WmsFormCache {
   tileSize: string;
   version: string;
   versionTouched: boolean;
+  crs: string;
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
@@ -76,6 +79,9 @@ export function WmsSource({
     setVersionTouched(touched);
   };
   const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(serviceCache?.options ?? []);
+  // The CRS picked in the selector or restored from a saved service; empty for
+  // the default. It applies only while the layers offer it (see wmsCrs below).
+  const [wmsCrsPick, setWmsCrsPick] = useState(serviceCache?.crs ?? "");
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();
@@ -92,6 +98,7 @@ export function WmsSource({
       tileSize: wmsTileSize,
       version: wmsVersion,
       versionTouched,
+      crs: wmsCrsPick,
       options: layerOptions,
     };
   }, [
@@ -103,8 +110,24 @@ export function WmsSource({
     wmsTileSize,
     wmsVersion,
     versionTouched,
+    wmsCrsPick,
     layerOptions,
   ]);
+
+  // The CRS codes every selected layer advertises. The desktop tile protocol
+  // reprojects any of them into Web Mercator, so there the user can request a
+  // layer in a CRS of its own; the web build cannot, and keeps EPSG:3857.
+  const crsChoices = wmsCrsChoices(layerOptions, wmsLayers, wmsVersion);
+  const pickedCrs =
+    crsChoices.length === 0 || crsChoices.includes(wmsCrsPick)
+      ? wmsCrsPick || "EPSG:3857"
+      : defaultWmsCrs(crsChoices);
+  const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
+  // Without retrieved layers (typed by hand, or a saved service) the selector
+  // still shows the saved CRS and lets the user go back to EPSG:3857.
+  const crsOptions = crsChoices.length > 0 ? crsChoices : [...new Set([wmsCrs, "EPSG:3857"])];
+  const showCrs = isTauri() && crsOptions.some((code) => code !== "EPSG:3857");
+  const showCrsWebNote = !isTauri() && crsChoices.length > 0 && !crsChoices.includes("EPSG:3857");
   // Guards against a stale in-flight retrieval overwriting the form after the
   // user has moved on: a monotonic token identifies the latest request, and the
   // AbortController cancels the previous one when a new request or an endpoint
@@ -185,6 +208,7 @@ export function WmsSource({
     // Only persist the version when it has an explicit source; an untouched
     // default stays eligible for URL/capabilities auto-detection on reload.
     ...(versionTouched ? { version: wmsVersion } : {}),
+    ...(wmsCrs !== "EPSG:3857" ? { crs: wmsCrs } : {}),
   });
 
   const applyFields = (fields: ServiceFields) => {
@@ -204,6 +228,7 @@ export function WmsSource({
     const detectedVersion = wmsVersionFromEndpoint(endpoint);
     setWmsVersion(normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"));
     markVersionTouched(Boolean(savedVersion || detectedVersion));
+    setWmsCrsPick(serviceFieldString(fields, "crs"));
     // The new endpoint's layers must be re-retrieved, so drop the old list and
     // cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
@@ -233,6 +258,7 @@ export function WmsSource({
           transparent: wmsTransparent,
           tileSize: wmsTileSize,
           version: wmsVersion,
+          crs: wmsCrs,
         }),
       ),
     );
@@ -286,6 +312,7 @@ export function WmsSource({
                 if (serviceChanged) {
                   setWmsVersion(detected ?? "1.1.1");
                   markVersionTouched(detected != null);
+                  setWmsCrsPick("");
                 } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
                   setWmsVersion(detected);
                   markVersionTouched(true);
@@ -400,7 +427,29 @@ export function WmsSource({
               <option value="1.3.0">1.3.0</option>
             </Select>
           </div>
+          {showCrs ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="wms-crs">{t("addData.wms.crs")}</Label>
+              <Select
+                id="wms-crs"
+                value={wmsCrs}
+                onChange={(event) => setWmsCrsPick(event.target.value)}
+              >
+                {crsOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </Select>
+              {wmsCrs !== "EPSG:3857" ? (
+                <p className="text-xs text-muted-foreground">{t("addData.wms.crsReprojected")}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
+        {showCrsWebNote ? (
+          <p className="text-xs text-muted-foreground">{t("addData.wms.crsDesktopOnly")}</p>
+        ) : null}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

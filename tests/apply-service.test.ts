@@ -134,6 +134,25 @@ describe("buildWmsLayer", () => {
     });
     assert.equal((layer.source as Record<string, unknown>).attribution, GEBCO_ATTRIBUTION);
   });
+
+  it("requests the tiles in the chosen CRS", () => {
+    const params = {
+      name: "WMS",
+      endpoint: "https://example.com/wms",
+      layers: "a",
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: "256",
+      version: "1.3.0",
+    };
+    const tileUrl = (layer: ReturnType<typeof buildWmsLayer>) =>
+      ((layer.source as Record<string, unknown>).tiles as string[])[0];
+    assert.match(tileUrl(buildWmsLayer({ ...params, crs: "epsg:25832" })), /[?&]CRS=EPSG%3A25832/);
+    // No CRS, or an empty one from a saved service, keeps Web Mercator.
+    assert.match(tileUrl(buildWmsLayer({ ...params, crs: "" })), /[?&]CRS=EPSG%3A3857/);
+    assert.throws(() => buildWmsLayer({ ...params, version: "1.1.1", crs: "CRS:84" }), /1\.3\.0/);
+  });
 });
 
 describe("buildWmtsLayer", () => {
@@ -258,6 +277,17 @@ describe("field mappers", () => {
       entry("wms", { endpoint: "https://e/wms?VERSION=1.3.0", layers: "a" }),
     );
     assert.equal(params.version, "1.3.0");
+  });
+
+  it("reads the saved WMS CRS", () => {
+    const saved = wmsFieldsToParams(
+      entry("wms", { endpoint: "https://e/wms", layers: "a", crs: "EPSG:4326" }),
+    );
+    assert.equal(saved.crs, "EPSG:4326");
+    assert.equal(
+      wmsFieldsToParams(entry("wms", { endpoint: "https://e/wms", layers: "a" })).crs,
+      "",
+    );
   });
 
   it("defaults the WMS version to 1.1.1 when neither source has it", () => {

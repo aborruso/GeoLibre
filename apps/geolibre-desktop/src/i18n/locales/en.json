@@ -490,7 +490,10 @@
       "selectLayer_other": "Select from {{count}} layers",
       "noLayersFound": "No layers were found for this service.",
       "retrieveError": "Could not retrieve layers from this service.",
-      "version": "WMS version"
+      "version": "WMS version",
+      "crs": "Coordinate reference system",
+      "crsReprojected": "The map requests the layer in this CRS and reprojects it to Web Mercator.",
+      "crsDesktopOnly": "This layer does not offer Web Mercator (EPSG:3857). The desktop app can request it in one of its own coordinate reference systems."
     },
     "csw": {
       "defaultName": "CSW Catalog",
