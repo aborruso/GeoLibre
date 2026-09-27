@@ -207,7 +207,7 @@ export function normalizeWmsVersion(version: unknown): string {
  * @throws Error when `crs` is none of these, or is CRS:84 with WMS 1.1.1
  *   (CRS:84 is defined by WMS 1.3.0 and a 1.1.1 server rejects it).
  */
-export function normalizeWmsCrs(crs: unknown, version: string): string {
+export function normalizeWmsCrs(crs: unknown, version: unknown): string {
   if (crs === undefined || crs === null) return "EPSG:3857";
   const code = typeof crs === "string" ? crs.trim().toUpperCase() : "";
   if (code !== "EPSG:3857" && !GEOGRAPHIC_WMS_CRS.has(code) && !/^EPSG:\d{4,6}$/.test(code)) {
@@ -215,7 +215,7 @@ export function normalizeWmsCrs(crs: unknown, version: string): string {
       `Unsupported WMS CRS "${String(crs)}": use EPSG:3857, CRS:84 or an EPSG code such as "EPSG:25832".`,
     );
   }
-  if (code === "CRS:84" && version !== "1.3.0") {
+  if (code === "CRS:84" && normalizeWmsVersion(version) !== "1.3.0") {
     throw new Error('WMS CRS "CRS:84" needs version "1.3.0"; use EPSG:4326 with WMS 1.1.1.');
   }
   return code;

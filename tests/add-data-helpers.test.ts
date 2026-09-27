@@ -190,6 +190,11 @@ describe("normalizeWmsCrs", () => {
 
   it("rejects CRS:84 with WMS 1.1.1", () => {
     assert.throws(() => normalizeWmsCrs("CRS:84", "1.1.1"), /needs version "1.3.0"/);
+    assert.throws(() => normalizeWmsCrs("CRS:84", undefined), /needs version "1.3.0"/);
+  });
+
+  it("reads the version the way normalizeWmsVersion does", () => {
+    assert.equal(normalizeWmsCrs("CRS:84", "1.3"), "CRS:84");
   });
 
   it("rejects values that are not an EPSG code", () => {
