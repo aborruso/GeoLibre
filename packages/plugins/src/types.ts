@@ -129,6 +129,15 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
    * sends `CRS` instead of `SRS`; some servers accept only one version.
    */
   version?: string;
+  /**
+   * CRS the tiles are requested in (default `"EPSG:3857"`), for a server that
+   * does not offer Web Mercator: a geographic CRS (`"EPSG:4326"`,
+   * `"EPSG:4258"`, `"EPSG:6706"`, `"CRS:84"` with version 1.3.0) or any other
+   * `"EPSG:<code>"`, e.g. `"EPSG:25832"`. The desktop app redraws these tiles
+   * into Web Mercator; the web build still sends the Web Mercator BBOX, so
+   * such a layer stays blank there. Any other value throws.
+   */
+  crs?: string;
 }
 
 /** Overture Maps themes available through the host's official PMTiles source. */

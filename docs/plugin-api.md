@@ -623,6 +623,7 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   format?: string; // default "image/png"
   transparent?: boolean; // default true
   version?: string; // "1.1.1" (default) or "1.3.0" (sends CRS instead of SRS)
+  crs?: string; // "EPSG:3857" (default), "EPSG:4326", "CRS:84" (1.3.0 only), any "EPSG:<code>"
 }
 
 export interface GeoLibreCogLayerOptions {
@@ -655,6 +656,14 @@ app.addWmsLayer?.("LINZ Coverage", {
   transparent: true,
 });
 
+// A WMS that does not offer EPSG:3857: request a CRS it lists instead.
+app.addWmsLayer?.("Cadastral parcels", {
+  url: "https://wms.example.it/wms",
+  layers: "parcels",
+  version: "1.3.0",
+  crs: "EPSG:6706",
+});
+
 // COG — read the GeoTIFF directly (client-side), with raster controls.
 const cogId = await app.addCogLayer?.(
   "LINZ DEM",
@@ -664,6 +673,8 @@ const cogId = await app.addCogLayer?.(
 ```
 
 `options.engine` picks the renderer (`"maplibre-gl-raster"` for the GPU/deck.gl path, `"cog-tiler-wasm"` for the WebAssembly tiler, `"titiler"` for a TiTiler server). Unlike the other options it is **not per layer**: the raster control holds one engine for every raster it manages, so naming one re-renders the rasters already on the map. Pass `"auto"` to leave whatever the control is on alone; omit it and the GPU renderer is used. The GPU renderer requires a Mercator projection, so a plugin that expects to work on the globe should ask for `"cog-tiler-wasm"`.
+
+`addWmsLayer` requests Web Mercator tiles unless `crs` names another CRS, for a server whose capabilities do not list EPSG:3857. Pick one the layer lists, preferably geographic (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version: "1.3.0"`), otherwise a projected `EPSG:<code>` such as `EPSG:25832`. Only the desktop app redraws those tiles into Web Mercator: the web build still sends the Web Mercator BBOX, so such a layer stays blank there. An unsupported value, or `CRS:84` with WMS 1.1.1, throws.
 
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 

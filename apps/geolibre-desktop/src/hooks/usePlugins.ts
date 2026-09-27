@@ -166,7 +166,11 @@ import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import i18n from "../i18n";
 import { createPluginLocaleApi } from "../lib/plugin-locale";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
-import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
+import {
+  createWmsTileUrl,
+  normalizeWmsCrs,
+  normalizeWmsVersion,
+} from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { createPluginLayerGroupActions } from "../lib/plugin-layer-groups";
 import { createPluginLayerQueries } from "../lib/plugin-layer-queries";
@@ -990,8 +994,17 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         options?.beforeLayerId ?? null,
       ),
     addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
-      const { beforeLayerId, url, layers, styles, format, transparent, version, ...tileOptions } =
-        options;
+      const {
+        beforeLayerId,
+        url,
+        layers,
+        styles,
+        format,
+        transparent,
+        version,
+        crs,
+        ...tileOptions
+      } = options;
       // TypeScript enforces these, but an untyped JS plugin can pass "" — an
       // empty endpoint yields a relative GetMap URL that resolves against the
       // app origin and passes the store's empty-tile guard, persisting a layer
@@ -1021,6 +1034,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
           )}"; using "${resolvedVersion}".`,
         );
       }
+      const resolvedCrs = normalizeWmsCrs(crs, resolvedVersion);
       const tileUrl = createWmsTileUrl({
         endpoint: url,
         layers,
@@ -1029,6 +1043,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         transparent: resolvedTransparent,
         tileSize,
         version: resolvedVersion,
+        crs: resolvedCrs,
       });
       return store.addTileLayer(
         name,

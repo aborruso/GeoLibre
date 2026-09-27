@@ -19,6 +19,7 @@ import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 import { classifyFetchFailure } from "../../../lib/fetch-error";
 import { isTauri } from "../../../lib/is-tauri";
+import { GEOGRAPHIC_WMS_CRS } from "../../../lib/wms-geographic";
 import {
   DELIMITED_TEXT_DELIMITERS,
   EOX_S2CLOUDLESS_ATTRIBUTION,
@@ -196,6 +197,30 @@ export function normalizeWmsVersion(version: unknown): string {
   return typeof version === "string" && version.trim().startsWith("1.3") ? "1.3.0" : "1.1.1";
 }
 
+/**
+ * Normalizes the CRS a WMS layer requests its tiles in, mirroring
+ * `_normalize_wms_crs` in `python/src/geolibre/project.py`: EPSG:3857 (the
+ * default), a geographic CRS of {@link GEOGRAPHIC_WMS_CRS} or any other
+ * `EPSG:<code>`. The desktop tile protocol redraws the non-Web Mercator ones
+ * into Web Mercator; the web build sends them as they are.
+ *
+ * @throws Error when `crs` is none of these, or is CRS:84 with WMS 1.1.1
+ *   (CRS:84 is defined by WMS 1.3.0 and a 1.1.1 server rejects it).
+ */
+export function normalizeWmsCrs(crs: unknown, version: string): string {
+  if (crs === undefined || crs === null) return "EPSG:3857";
+  const code = typeof crs === "string" ? crs.trim().toUpperCase() : "";
+  if (code !== "EPSG:3857" && !GEOGRAPHIC_WMS_CRS.has(code) && !/^EPSG:\d{4,6}$/.test(code)) {
+    throw new Error(
+      `Unsupported WMS CRS "${String(crs)}": use EPSG:3857, CRS:84 or an EPSG code such as "EPSG:25832".`,
+    );
+  }
+  if (code === "CRS:84" && version !== "1.3.0") {
+    throw new Error('WMS CRS "CRS:84" needs version "1.3.0"; use EPSG:4326 with WMS 1.1.1.');
+  }
+  return code;
+}
+
 export function createWmsTileUrl(options: {
   endpoint: string;
   layers: string;
@@ -205,11 +230,14 @@ export function createWmsTileUrl(options: {
   tileSize: number;
   /** WMS protocol version, "1.1.1" (default) or "1.3.0". */
   version?: string;
+  /** CRS of the requested tiles, already normalized (default "EPSG:3857"). */
+  crs?: string;
 }): string {
   // WMS 1.3.0 renames the SRS parameter to CRS; a 1.3.0-only server (e.g. the
   // IGN Géoplateforme raster endpoint) rejects a 1.1.1 request outright with
   // VersionNegotiationFailed. EPSG:3857 keeps easting/northing axis order in
-  // both versions, so the BBOX template is unchanged.
+  // both versions, so the BBOX template is unchanged. Any other CRS keeps the
+  // Web Mercator BBOX template too: the desktop tile protocol rewrites it.
   const version = normalizeWmsVersion(options.version);
   return appendQuery(options.endpoint, [
     ["SERVICE", "WMS"],
@@ -219,7 +247,7 @@ export function createWmsTileUrl(options: {
     ["STYLES", options.styles],
     ["FORMAT", options.format],
     ["TRANSPARENT", options.transparent ? "TRUE" : "FALSE"],
-    [version === "1.3.0" ? "CRS" : "SRS", "EPSG:3857"],
+    [version === "1.3.0" ? "CRS" : "SRS", options.crs ?? "EPSG:3857"],
     ["BBOX", "{bbox-epsg-3857}"],
     ["WIDTH", String(options.tileSize)],
     ["HEIGHT", String(options.tileSize)],

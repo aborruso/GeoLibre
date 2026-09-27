@@ -22,6 +22,7 @@ import {
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
+  normalizeWmsCrs,
   normalizeWmsVersion,
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
@@ -138,6 +139,63 @@ describe("createWmsTileUrl", () => {
     assert.ok(url.includes("CRS=EPSG%3A3857"));
     assert.ok(!url.includes("SRS="));
     assert.ok(url.includes("BBOX={bbox-epsg-3857}"));
+  });
+});
+
+describe("createWmsTileUrl with a crs", () => {
+  const base = {
+    endpoint: "https://x.test/wms",
+    layers: "a",
+    styles: "",
+    format: "image/png",
+    transparent: true,
+    tileSize: 256,
+  };
+
+  it("writes a geographic CRS as SRS for WMS 1.1.1", () => {
+    const url = createWmsTileUrl({ ...base, crs: "EPSG:4326" });
+    assert.ok(url.includes("SRS=EPSG%3A4326"));
+    assert.ok(!url.includes("EPSG%3A3857"));
+    // The BBOX stays the Web Mercator template: the desktop tile protocol
+    // rewrites it for the requested CRS.
+    assert.ok(url.includes("BBOX={bbox-epsg-3857}"));
+  });
+
+  it("writes the CRS parameter for WMS 1.3.0", () => {
+    const url = createWmsTileUrl({ ...base, version: "1.3.0", crs: "EPSG:4326" });
+    assert.ok(url.includes("CRS=EPSG%3A4326"));
+    assert.ok(!url.includes("SRS="));
+  });
+
+  it("writes CRS:84 and a projected EPSG code", () => {
+    assert.ok(
+      createWmsTileUrl({ ...base, version: "1.3.0", crs: "CRS:84" }).includes("CRS=CRS%3A84"),
+    );
+    assert.ok(createWmsTileUrl({ ...base, crs: "EPSG:25833" }).includes("SRS=EPSG%3A25833"));
+  });
+});
+
+describe("normalizeWmsCrs", () => {
+  it("defaults to Web Mercator", () => {
+    assert.equal(normalizeWmsCrs(undefined, "1.1.1"), "EPSG:3857");
+    assert.equal(normalizeWmsCrs(null, "1.3.0"), "EPSG:3857");
+  });
+
+  it("trims and upper-cases the geographic and EPSG codes it accepts", () => {
+    assert.equal(normalizeWmsCrs(" epsg:4326 ", "1.1.1"), "EPSG:4326");
+    assert.equal(normalizeWmsCrs("EPSG:6706", "1.3.0"), "EPSG:6706");
+    assert.equal(normalizeWmsCrs("crs:84", "1.3.0"), "CRS:84");
+    assert.equal(normalizeWmsCrs("EPSG:25832", "1.1.1"), "EPSG:25832");
+  });
+
+  it("rejects CRS:84 with WMS 1.1.1", () => {
+    assert.throws(() => normalizeWmsCrs("CRS:84", "1.1.1"), /needs version "1.3.0"/);
+  });
+
+  it("rejects values that are not an EPSG code", () => {
+    for (const value of ["", "EPSG:", "EPSG:12", "WGS84", "urn:ogc:def:crs:EPSG::4326", 4326]) {
+      assert.throws(() => normalizeWmsCrs(value, "1.3.0"), /Unsupported WMS CRS/);
+    }
   });
 });
 
