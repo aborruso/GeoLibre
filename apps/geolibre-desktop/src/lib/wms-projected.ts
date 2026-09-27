@@ -100,6 +100,15 @@ export async function canReprojectWmsCrs(code: string): Promise<boolean> {
   return (await resolveProjection(upper)) !== null;
 }
 
+/**
+ * `crs` when the desktop tile protocol can reproject it, else undefined, which
+ * requests the tiles in Web Mercator: a saved service may carry a CRS the
+ * bundled EPSG tables do not know.
+ */
+export async function reprojectableWmsCrs(crs: string | undefined): Promise<string | undefined> {
+  return crs && (await canReprojectWmsCrs(crs)) ? crs : undefined;
+}
+
 function distance([x1, y1]: Point, [x2, y2]: Point): number {
   return Math.hypot(x2 - x1, y2 - y1);
 }

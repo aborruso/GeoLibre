@@ -502,9 +502,12 @@ export async function applyServiceEntry(
         throw new Error("The desktop app needs an absolute http(s) WMS endpoint.");
       }
       const { routeWmsLayerThroughNativeProtocol } = await import("../../../lib/xyz-url");
-      // Only the desktop tile protocol reprojects a CRS other than EPSG:3857;
-      // the web build keeps Web Mercator even for a service saved on desktop.
-      const wmsParams = isTauri() ? params : { ...params, crs: undefined };
+      // Only the desktop tile protocol reprojects a CRS other than EPSG:3857,
+      // and only one its EPSG tables know; anything else keeps Web Mercator,
+      // including every saved CRS in the web build.
+      const { reprojectableWmsCrs } = await import("../../../lib/wms-projected");
+      const crs = isTauri() ? await reprojectableWmsCrs(params.crs) : undefined;
+      const wmsParams = { ...params, crs };
       addLayer(routeWmsLayerThroughNativeProtocol(buildWmsLayer(wmsParams)), beforeLayerId);
       return;
     }

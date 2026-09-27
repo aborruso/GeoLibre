@@ -4,6 +4,7 @@ import proj4 from "proj4";
 import {
   canReprojectWmsCrs,
   projectedWmsRequest,
+  reprojectableWmsCrs,
   sourcePixelMap,
   warpToMercator,
 } from "../apps/geolibre-desktop/src/lib/wms-projected";
@@ -103,6 +104,12 @@ test("canReprojectWmsCrs accepts only CRSs the tile protocol can draw", async ()
   for (const crs of ["EPSG:999999", "EPSG:1"]) {
     assert.equal(await canReprojectWmsCrs(crs), false, crs);
   }
+});
+
+test("reprojectableWmsCrs falls back to Web Mercator for a CRS it cannot draw", async () => {
+  assert.equal(await reprojectableWmsCrs("EPSG:25832"), "EPSG:25832");
+  assert.equal(await reprojectableWmsCrs("EPSG:999999"), undefined);
+  assert.equal(await reprojectableWmsCrs(undefined), undefined);
 });
 
 test("projectedWmsRequest leaves Web Mercator, geographic and unknown CRSs alone", async () => {

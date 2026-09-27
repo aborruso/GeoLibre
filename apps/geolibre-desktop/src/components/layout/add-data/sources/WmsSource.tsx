@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { buildWmsLayer } from "../apply-service";
 import {
@@ -13,6 +13,7 @@ import {
   defaultWmsCrs,
   fetchWmsCapabilities,
   isServiceFormUrl,
+  normalizeWmsCrs,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
   stripOgcOperationParams,
@@ -22,7 +23,7 @@ import {
 } from "../helpers";
 import { routeWmsLayerThroughNativeProtocol } from "../../../../lib/xyz-url";
 import { isHttpWmsUrl } from "../../../../lib/native-wms-url";
-import { canReprojectWmsCrs } from "../../../../lib/wms-projected";
+import { canReprojectWmsCrs, reprojectableWmsCrs } from "../../../../lib/wms-projected";
 import { isTauri } from "../../../../lib/tauri-io";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
@@ -46,24 +47,6 @@ interface WmsFormCache {
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
-
-/**
- * Drops from each layer the CRS codes the desktop tile protocol cannot
- * reproject (an EPSG code missing from its tables), so the selector offers
- * only CRSs that draw.
- */
-async function keepReprojectableCrs(options: WmsLayerOption[]): Promise<WmsLayerOption[]> {
-  const codes = [...new Set(options.flatMap((option) => option.crs ?? []))];
-  const supported = new Set<string>();
-  await Promise.all(
-    codes.map(async (code) => {
-      if (await canReprojectWmsCrs(code)) supported.add(code);
-    }),
-  );
-  return options.map((option) =>
-    option.crs ? { ...option, crs: option.crs.filter((code) => supported.has(code)) } : option,
-  );
-}
 
 export function WmsSource({
   initialUrl = "",
@@ -135,12 +118,41 @@ export function WmsSource({
   ]);
 
   // The CRS codes every selected layer advertises. The desktop tile protocol
-  // reprojects any of them into Web Mercator, so there the user can request a
-  // layer in a CRS of its own; the web build cannot, and keeps EPSG:3857.
-  const crsChoices = wmsCrsChoices(layerOptions, wmsLayers, wmsVersion);
+  // reprojects them into Web Mercator, so there the user can request a layer
+  // in a CRS of its own; the web build cannot, and keeps EPSG:3857.
+  const advertisedCrs = useMemo(
+    () => wmsCrsChoices(layerOptions, wmsLayers, wmsVersion),
+    [layerOptions, wmsLayers, wmsVersion],
+  );
+  // Of those, the ones the tile protocol can reproject (an EPSG code missing
+  // from its tables cannot be), checked only for the selected layers.
+  const advertisedKey = advertisedCrs.join(",");
+  const [reprojectable, setReprojectable] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (!isTauri() || !advertisedKey) return;
+    let cancelled = false;
+    const codes = advertisedKey.split(",");
+    void Promise.all(codes.map(canReprojectWmsCrs)).then((supported) => {
+      if (!cancelled) setReprojectable(new Set(codes.filter((_, index) => supported[index])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [advertisedKey]);
+  const crsChoices = isTauri()
+    ? advertisedCrs.filter((code) => reprojectable.has(code))
+    : advertisedCrs;
+  // A pick the WMS version cannot request (CRS:84 with 1.1.1) falls back to
+  // Web Mercator, like a pick the selected layers do not offer.
+  let validPick = "EPSG:3857";
+  try {
+    validPick = normalizeWmsCrs(wmsCrsPick || undefined, wmsVersion);
+  } catch {
+    // Keep EPSG:3857.
+  }
   const pickedCrs =
-    crsChoices.length === 0 || crsChoices.includes(wmsCrsPick)
-      ? wmsCrsPick || "EPSG:3857"
+    crsChoices.length === 0 || crsChoices.includes(validPick)
+      ? validPick
       : defaultWmsCrs(crsChoices);
   const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
   // Without retrieved layers (typed by hand, or a saved service) the selector
@@ -187,13 +199,9 @@ export function WmsSource({
     setIsRetrieving(true);
     setRetrieveError(null);
     try {
-      const capabilities = await fetchWmsCapabilities(endpoint, {
+      const { layers: options, version } = await fetchWmsCapabilities(endpoint, {
         signal: controller.signal,
       });
-      const { version } = capabilities;
-      const options = isTauri()
-        ? await keepReprojectableCrs(capabilities.layers)
-        : capabilities.layers;
       if (isStale()) return;
       if (options.length === 0) {
         setLayerOptions([]);
@@ -265,7 +273,7 @@ export function WmsSource({
     setRetrieveError(null);
   };
 
-  const handleSubmit = source.runSubmit(() => {
+  const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || t("addData.wms.defaultName");
     if (!isServiceFormUrl(wmsEndpoint.trim()) || (isTauri() && !isHttpWmsUrl(wmsEndpoint.trim()))) {
       throw new Error(t("addData.wms.errorUrl"));
@@ -287,7 +295,7 @@ export function WmsSource({
           transparent: wmsTransparent,
           tileSize: wmsTileSize,
           version: wmsVersion,
-          crs: wmsCrs,
+          crs: await reprojectableWmsCrs(wmsCrs),
         }),
       ),
     );
