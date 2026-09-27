@@ -5,6 +5,7 @@ import {
   defaultWmsCrs,
   parseWmsCapabilities,
   wmsCrsChoices,
+  wmsLayersAdvertiseCrs,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/helpers";
 
 globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
@@ -94,6 +95,14 @@ describe("WMS capabilities CRS", () => {
     const { layers } = parseWmsCapabilities(CAPABILITIES_130);
     assert.deepEqual(wmsCrsChoices(layers, "roads,typed_by_hand", "1.3.0"), []);
     assert.deepEqual(wmsCrsChoices(layers, "", "1.3.0"), []);
+  });
+
+  it("tells retrieved layers from layers it knows nothing about", () => {
+    const { layers } = parseWmsCapabilities(CAPABILITIES_130);
+    assert.equal(wmsLayersAdvertiseCrs(layers, "roads, parcels"), true);
+    assert.equal(wmsLayersAdvertiseCrs(layers, "roads,typed_by_hand"), false);
+    assert.equal(wmsLayersAdvertiseCrs(layers, ""), false);
+    assert.equal(wmsLayersAdvertiseCrs([{ name: "a", title: "a", crs: [] }], "a"), false);
   });
 
   it("defaults to Web Mercator, else a geographic CRS, else the first code", () => {

@@ -18,6 +18,7 @@ import {
   serviceRequestErrorMessage,
   stripOgcOperationParams,
   wmsCrsChoices,
+  wmsLayersAdvertiseCrs,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
@@ -150,8 +151,12 @@ export function WmsSource({
   } catch {
     // Keep EPSG:3857.
   }
+  // Keep the pick when the choices are unknown (layers typed by hand, a saved
+  // service); when the capabilities list the selected layers' CRSs, keep it
+  // only if they offer it, else fall back to their default.
   const pickedCrs =
-    crsChoices.length === 0 || crsChoices.includes(validPick)
+    crsChoices.includes(validPick) ||
+    (crsChoices.length === 0 && !wmsLayersAdvertiseCrs(layerOptions, wmsLayers))
       ? validPick
       : defaultWmsCrs(crsChoices);
   const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
@@ -349,6 +354,9 @@ export function WmsSource({
                 if (serviceChanged) {
                   setWmsVersion(detected ?? "1.1.1");
                   markVersionTouched(detected != null);
+                } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
+                  setWmsVersion(detected);
+                  markVersionTouched(true);
                 }
                 // The CRS belongs to the service, and a query parameter can
                 // select a different one on the same path (MapServer's `map=`):
@@ -358,9 +366,6 @@ export function WmsSource({
                   stripOgcOperationParams(previous.trim(), "WMS")
                 ) {
                   setWmsCrsPick("");
-                } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
-                  setWmsVersion(detected);
-                  markVersionTouched(true);
                 }
                 // Layers belong to the previous endpoint; clear them (and cancel
                 // any in-flight retrieval) so the list never reflects a

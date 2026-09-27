@@ -769,6 +769,23 @@ export function wmsCrsChoices(
 }
 
 /**
+ * True when every layer of a comma-separated LAYERS value is among `options`
+ * with the CRS codes it advertises, i.e. the capabilities say which CRSs the
+ * selection supports, even when {@link wmsCrsChoices} finds none it can use.
+ * False for layers typed by hand or a saved service not retrieved again.
+ */
+export function wmsLayersAdvertiseCrs(options: WmsLayerOption[], layers: string): boolean {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return (
+    names.length > 0 &&
+    names.every((name) => (options.find((option) => option.name === name)?.crs?.length ?? 0) > 0)
+  );
+}
+
+/**
  * The CRS the dialog picks by default among `choices`: EPSG:3857 when offered
  * (no reprojection), else a geographic CRS, else the first one; EPSG:3857 when
  * there are no choices, as before the dialog offered any.

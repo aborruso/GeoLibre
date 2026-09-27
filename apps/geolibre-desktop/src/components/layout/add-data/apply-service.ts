@@ -503,8 +503,8 @@ export async function applyServiceEntry(
       }
       const { routeWmsLayerThroughNativeProtocol } = await import("../../../lib/xyz-url");
       // Only the desktop tile protocol reprojects a CRS other than EPSG:3857,
-      // and only one its EPSG tables know; anything else keeps Web Mercator,
-      // including every saved CRS in the web build.
+      // and only a code its EPSG tables can resolve; anything else keeps Web
+      // Mercator, including every saved CRS in the web build.
       const { reprojectableWmsCrs } = await import("../../../lib/wms-projected");
       const crs = isTauri() ? await reprojectableWmsCrs(params.crs) : undefined;
       const wmsParams = { ...params, crs };
