@@ -417,6 +417,31 @@ describe("applyServiceEntry", () => {
     assert.match((source.tiles as string[])[0], /[?&]SRS=EPSG%3A3857/);
   });
 
+  it("requests a saved WMS CRS on desktop only when it can be reprojected", async () => {
+    const globals = globalThis as { window?: unknown };
+    const originalWindow = globals.window;
+    globals.window = { __TAURI_INTERNALS__: {} };
+    const tileFor = async (fields: Record<string, string>) => {
+      const { added, deps } = stubDeps();
+      await applyServiceEntry(
+        entry("wms", { endpoint: "https://e/wms", layers: "a", ...fields }),
+        deps,
+      );
+      const tiles = (added[0].layer.source as Record<string, unknown>).tiles as string[];
+      // The native protocol wraps the encoded GetMap URL, so decode twice.
+      return decodeURIComponent(decodeURIComponent(tiles[0]));
+    };
+    try {
+      assert.match(await tileFor({ crs: "EPSG:25832" }), /SRS=EPSG:25832/);
+      // Unknown to the EPSG tables, or not requestable with this version.
+      assert.match(await tileFor({ crs: "EPSG:999999" }), /SRS=EPSG:3857/);
+      assert.match(await tileFor({ crs: "CRS:84", version: "1.1.1" }), /SRS=EPSG:3857/);
+      assert.match(await tileFor({ crs: "CRS:84", version: "1.3.0" }), /CRS=CRS:84/);
+    } finally {
+      globals.window = originalWindow;
+    }
+  });
+
   it("adds a WMTS layer through the store", async () => {
     const { added, deps } = stubDeps();
     await applyServiceEntry(entry("wmts", { url: "https://t/{z}/{x}/{y}" }), deps);

@@ -10,14 +10,13 @@ import {
   GEBCO_WMS_LAYERS,
 } from "../constants";
 import {
-  defaultWmsCrs,
   fetchWmsCapabilities,
   isServiceFormUrl,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
   stripOgcOperationParams,
   wmsCrsChoices,
-  usableWmsCrs,
+  pickWmsCrs,
   wmsLayersAdvertiseCrs,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
@@ -48,6 +47,12 @@ interface WmsFormCache {
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
+
+/** The codes among `codes` the desktop tile protocol can reproject. */
+async function reprojectableCodes(codes: string[]): Promise<string[]> {
+  const supported = await Promise.all(codes.map(canReprojectWmsCrs));
+  return codes.filter((_, index) => supported[index]);
+}
 
 export function WmsSource({
   initialUrl = "",
@@ -126,7 +131,8 @@ export function WmsSource({
     [layerOptions, wmsLayers, wmsVersion],
   );
   // Of those, the ones the tile protocol can reproject (an EPSG code missing
-  // from its tables cannot be), checked only for the selected layers.
+  // from its tables cannot be), checked only for the selected layers. The web
+  // build checks too, so its note promises only CRSs the desktop app can draw.
   const advertisedKey = advertisedCrs.join(",");
   // Keyed by the list it was computed for, so a stale result never applies.
   const [reprojectable, setReprojectable] = useState<{ key: string; codes: ReadonlySet<string> }>({
@@ -134,41 +140,29 @@ export function WmsSource({
     codes: new Set(),
   });
   useEffect(() => {
-    if (!isTauri() || !advertisedKey) return;
+    if (!advertisedKey) return;
     let cancelled = false;
-    const codes = advertisedKey.split(",");
-    void Promise.all(codes.map(canReprojectWmsCrs)).then((supported) => {
-      if (cancelled) return;
-      setReprojectable({
-        key: advertisedKey,
-        codes: new Set(codes.filter((_, index) => supported[index])),
-      });
+    void reprojectableCodes(advertisedKey.split(",")).then((codes) => {
+      if (!cancelled) setReprojectable({ key: advertisedKey, codes: new Set(codes) });
     });
     return () => {
       cancelled = true;
     };
   }, [advertisedKey]);
   const reprojectableReady = reprojectable.key === advertisedKey;
-  const crsChoices = isTauri()
-    ? advertisedCrs.filter((code) => reprojectableReady && reprojectable.codes.has(code))
-    : advertisedCrs;
-  // A pick the WMS version cannot request (CRS:84 with 1.1.1) falls back to
-  // Web Mercator, like a pick the selected layers do not offer.
-  const validPick = usableWmsCrs(wmsCrsPick, wmsVersion) ?? "EPSG:3857";
-  // Keep the pick when the choices are unknown (layers typed by hand, a saved
-  // service); when the capabilities list the selected layers' CRSs, keep it
-  // only if they offer it, else fall back to their default.
-  const pickedCrs =
-    crsChoices.includes(validPick) ||
-    (crsChoices.length === 0 && !wmsLayersAdvertiseCrs(layerOptions, wmsLayers))
-      ? validPick
-      : defaultWmsCrs(crsChoices);
+  const reprojectableChoices = advertisedCrs.filter(
+    (code) => reprojectableReady && reprojectable.codes.has(code),
+  );
+  const crsChoices = isTauri() ? reprojectableChoices : advertisedCrs;
+  const layersAdvertiseCrs = wmsLayersAdvertiseCrs(layerOptions, wmsLayers);
+  const pickedCrs = pickWmsCrs(crsChoices, wmsCrsPick, wmsVersion, layersAdvertiseCrs);
   const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
   // Without retrieved layers (typed by hand, or a saved service) the selector
   // still shows the saved CRS and lets the user go back to EPSG:3857.
   const crsOptions = crsChoices.length > 0 ? crsChoices : [...new Set([wmsCrs, "EPSG:3857"])];
   const showCrs = isTauri() && crsOptions.some((code) => code !== "EPSG:3857");
-  const showCrsWebNote = !isTauri() && crsChoices.length > 0 && !crsChoices.includes("EPSG:3857");
+  const showCrsWebNote =
+    !isTauri() && reprojectableChoices.length > 0 && !reprojectableChoices.includes("EPSG:3857");
   // The selected layers offer only CRSs this build cannot reproject: say so
   // rather than silently requesting Web Mercator, which they do not offer.
   const showCrsUnsupportedNote =
@@ -286,6 +280,15 @@ export function WmsSource({
     setRetrieveError(null);
   };
 
+  // The CRS to submit, resolved against the reprojection check even when the
+  // one behind the selector has not finished yet, so an early submit never
+  // requests a CRS the selected layers do not offer.
+  const submittedCrs = async (): Promise<string | undefined> => {
+    if (!isTauri()) return undefined;
+    const choices = reprojectableReady ? crsChoices : await reprojectableCodes(advertisedCrs);
+    return reprojectableWmsCrs(pickWmsCrs(choices, wmsCrsPick, wmsVersion, layersAdvertiseCrs));
+  };
+
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || t("addData.wms.defaultName");
     if (!isServiceFormUrl(wmsEndpoint.trim()) || (isTauri() && !isHttpWmsUrl(wmsEndpoint.trim()))) {
@@ -308,7 +311,7 @@ export function WmsSource({
           transparent: wmsTransparent,
           tileSize: wmsTileSize,
           version: wmsVersion,
-          crs: await reprojectableWmsCrs(wmsCrs),
+          crs: await submittedCrs(),
         }),
       ),
     );

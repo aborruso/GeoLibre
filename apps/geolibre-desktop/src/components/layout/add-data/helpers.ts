@@ -800,6 +800,24 @@ export function wmsLayersAdvertiseCrs(options: WmsLayerOption[], layers: string)
 }
 
 /**
+ * The CRS the Add WMS dialog requests: the user's `pick` when `version` can
+ * request it and the selected layers offer it, or when their CRSs are unknown
+ * (`layersAdvertiseCrs` false: typed by hand, a saved service); otherwise the
+ * {@link defaultWmsCrs} of `choices`.
+ */
+export function pickWmsCrs(
+  choices: string[],
+  pick: string,
+  version: string,
+  layersAdvertiseCrs: boolean,
+): string {
+  const valid = usableWmsCrs(pick, version) ?? "EPSG:3857";
+  return choices.includes(valid) || (choices.length === 0 && !layersAdvertiseCrs)
+    ? valid
+    : defaultWmsCrs(choices);
+}
+
+/**
  * The CRS the dialog picks by default among `choices`: EPSG:3857 when offered
  * (no reprojection), else a geographic CRS, else the first one; EPSG:3857 when
  * there are no choices, as before the dialog offered any.

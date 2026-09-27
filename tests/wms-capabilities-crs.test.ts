@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   defaultWmsCrs,
   parseWmsCapabilities,
+  pickWmsCrs,
   usableWmsCrs,
   wmsCrsChoices,
   wmsLayersAdvertiseCrs,
@@ -112,6 +113,20 @@ describe("WMS capabilities CRS", () => {
     assert.equal(usableWmsCrs("CRS:84", "1.1.1"), undefined);
     assert.equal(usableWmsCrs("not a crs", "1.3.0"), undefined);
     assert.equal(usableWmsCrs(undefined, "1.3.0"), undefined);
+  });
+
+  it("keeps the pick only when offered, or when the layers' CRSs are unknown", () => {
+    const choices = ["EPSG:4326", "EPSG:25832"];
+    assert.equal(pickWmsCrs(choices, "EPSG:25832", "1.3.0", true), "EPSG:25832");
+    // Not offered by the selected layers: their default.
+    assert.equal(pickWmsCrs(choices, "EPSG:3003", "1.3.0", true), "EPSG:4326");
+    // Retrieved layers with no usable CRS: Web Mercator, not the old pick.
+    assert.equal(pickWmsCrs([], "EPSG:25832", "1.3.0", true), "EPSG:3857");
+    // Layers typed by hand or a saved service: the pick stands.
+    assert.equal(pickWmsCrs([], "epsg:25832", "1.3.0", false), "EPSG:25832");
+    // A pick the version cannot request falls back.
+    assert.equal(pickWmsCrs([], "CRS:84", "1.1.1", false), "EPSG:3857");
+    assert.equal(pickWmsCrs([], "", "1.3.0", false), "EPSG:3857");
   });
 
   it("defaults to Web Mercator, else a geographic CRS, else the first code", () => {
