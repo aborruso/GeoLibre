@@ -8,10 +8,11 @@ import type { GeoLibreImportLayerStyleResult } from "@geolibre/plugins";
  * Layers panel's "Import style" does.
  *
  * Extracted from `usePlugins.ts` for the same reason as
- * `plugin-layer-groups.ts`: that module imports the entire built-in plugin
- * registry, so a unit test reaching this through `createAppAPI` would have to
- * stub `maplibre-gl`, `window`, and `localStorage`. This needs only the store
- * and the pure style readers of `@geolibre/map/style-import`.
+ * `plugin-layer-queries.ts` and `plugin-layer-groups.ts`: that module imports
+ * the entire built-in plugin registry, so a unit test reaching this through
+ * `createAppAPI` would have to stub `maplibre-gl`, `window`, and
+ * `localStorage`. This needs only the store and the pure style readers of
+ * `@geolibre/map/style-import`.
  */
 export function createPluginLayerStyleActions() {
   return {
