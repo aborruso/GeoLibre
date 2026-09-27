@@ -128,20 +128,29 @@ export function WmsSource({
   // Of those, the ones the tile protocol can reproject (an EPSG code missing
   // from its tables cannot be), checked only for the selected layers.
   const advertisedKey = advertisedCrs.join(",");
-  const [reprojectable, setReprojectable] = useState<ReadonlySet<string>>(new Set());
+  // Keyed by the list it was computed for, so a stale result never applies.
+  const [reprojectable, setReprojectable] = useState<{ key: string; codes: ReadonlySet<string> }>({
+    key: "",
+    codes: new Set(),
+  });
   useEffect(() => {
     if (!isTauri() || !advertisedKey) return;
     let cancelled = false;
     const codes = advertisedKey.split(",");
     void Promise.all(codes.map(canReprojectWmsCrs)).then((supported) => {
-      if (!cancelled) setReprojectable(new Set(codes.filter((_, index) => supported[index])));
+      if (cancelled) return;
+      setReprojectable({
+        key: advertisedKey,
+        codes: new Set(codes.filter((_, index) => supported[index])),
+      });
     });
     return () => {
       cancelled = true;
     };
   }, [advertisedKey]);
+  const reprojectableReady = reprojectable.key === advertisedKey;
   const crsChoices = isTauri()
-    ? advertisedCrs.filter((code) => reprojectable.has(code))
+    ? advertisedCrs.filter((code) => reprojectableReady && reprojectable.codes.has(code))
     : advertisedCrs;
   // A pick the WMS version cannot request (CRS:84 with 1.1.1) falls back to
   // Web Mercator, like a pick the selected layers do not offer.
@@ -160,6 +169,10 @@ export function WmsSource({
   const crsOptions = crsChoices.length > 0 ? crsChoices : [...new Set([wmsCrs, "EPSG:3857"])];
   const showCrs = isTauri() && crsOptions.some((code) => code !== "EPSG:3857");
   const showCrsWebNote = !isTauri() && crsChoices.length > 0 && !crsChoices.includes("EPSG:3857");
+  // The selected layers offer only CRSs this build cannot reproject: say so
+  // rather than silently requesting Web Mercator, which they do not offer.
+  const showCrsUnsupportedNote =
+    isTauri() && reprojectableReady && advertisedCrs.length > 0 && crsChoices.length === 0;
   // Guards against a stale in-flight retrieval overwriting the form after the
   // user has moved on: a monotonic token identifies the latest request, and the
   // AbortController cancels the previous one when a new request or an endpoint
@@ -494,6 +507,9 @@ export function WmsSource({
         </div>
         {showCrsWebNote ? (
           <p className="text-xs text-muted-foreground">{t("addData.wms.crsDesktopOnly")}</p>
+        ) : null}
+        {showCrsUnsupportedNote ? (
+          <p className="text-xs text-muted-foreground">{t("addData.wms.crsUnsupported")}</p>
         ) : null}
         <label className="flex items-center gap-2 text-sm">
           <input

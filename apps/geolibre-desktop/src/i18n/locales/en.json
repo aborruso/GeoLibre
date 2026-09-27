@@ -493,7 +493,8 @@
       "version": "WMS version",
       "crs": "Coordinate reference system",
       "crsReprojected": "The map requests the layer in this CRS and reprojects it to Web Mercator.",
-      "crsDesktopOnly": "This layer does not offer Web Mercator (EPSG:3857). The desktop app can request it in one of its own coordinate reference systems."
+      "crsDesktopOnly": "This layer does not offer Web Mercator (EPSG:3857). The desktop app can request it in one of its own coordinate reference systems.",
+      "crsUnsupported": "This layer does not offer Web Mercator (EPSG:3857), and none of its coordinate reference systems can be reprojected here. It is requested in EPSG:3857, which the service may reject."
     },
     "csw": {
       "defaultName": "CSW Catalog",
