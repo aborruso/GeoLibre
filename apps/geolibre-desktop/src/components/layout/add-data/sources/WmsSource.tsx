@@ -17,6 +17,7 @@ import {
   stripOgcOperationParams,
   wmsCrsChoices,
   pickWmsCrs,
+  usableWmsCrs,
   wmsLayersAdvertiseCrs,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
@@ -130,32 +131,44 @@ export function WmsSource({
     () => wmsCrsChoices(layerOptions, wmsLayers, wmsVersion),
     [layerOptions, wmsLayers, wmsVersion],
   );
-  // Of those, the ones the tile protocol can reproject (an EPSG code missing
-  // from its tables cannot be), checked only for the selected layers. The web
-  // build checks too, so its note promises only CRSs the desktop app can draw.
-  const advertisedKey = advertisedCrs.join(",");
+  // Of those, and of the user's own pick (a saved service may carry one), the
+  // ones the tile protocol can reproject: an EPSG code missing from its tables
+  // cannot be. The web build checks too, so its note promises only CRSs the
+  // desktop app can draw.
+  const usablePick = usableWmsCrs(wmsCrsPick, wmsVersion);
+  const checkedKey = [...new Set([...advertisedCrs, ...(usablePick ? [usablePick] : [])])].join(
+    ",",
+  );
   // Keyed by the list it was computed for, so a stale result never applies.
   const [reprojectable, setReprojectable] = useState<{ key: string; codes: ReadonlySet<string> }>({
     key: "",
     codes: new Set(),
   });
   useEffect(() => {
-    if (!advertisedKey) return;
+    if (!checkedKey) return;
     let cancelled = false;
-    void reprojectableCodes(advertisedKey.split(",")).then((codes) => {
-      if (!cancelled) setReprojectable({ key: advertisedKey, codes: new Set(codes) });
+    void reprojectableCodes(checkedKey.split(",")).then((codes) => {
+      if (!cancelled) setReprojectable({ key: checkedKey, codes: new Set(codes) });
     });
     return () => {
       cancelled = true;
     };
-  }, [advertisedKey]);
-  const reprojectableReady = reprojectable.key === advertisedKey;
-  const reprojectableChoices = advertisedCrs.filter(
-    (code) => reprojectableReady && reprojectable.codes.has(code),
-  );
+  }, [checkedKey]);
+  const reprojectableReady = reprojectable.key === checkedKey;
+  const canDraw = (code: string) => reprojectableReady && reprojectable.codes.has(code);
+  const reprojectableChoices = advertisedCrs.filter(canDraw);
   const crsChoices = isTauri() ? reprojectableChoices : advertisedCrs;
   const layersAdvertiseCrs = wmsLayersAdvertiseCrs(layerOptions, wmsLayers);
-  const pickedCrs = pickWmsCrs(crsChoices, wmsCrsPick, wmsVersion, layersAdvertiseCrs);
+  // A pick the tile protocol turned out unable to draw is dropped, so the form
+  // never claims a reprojection the submit would not do.
+  const pickUndrawable =
+    isTauri() && reprojectableReady && usablePick !== undefined && !canDraw(usablePick);
+  const pickedCrs = pickWmsCrs(
+    crsChoices,
+    pickUndrawable ? "" : wmsCrsPick,
+    wmsVersion,
+    layersAdvertiseCrs,
+  );
   const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
   // Without retrieved layers (typed by hand, or a saved service) the selector
   // still shows the saved CRS and lets the user go back to EPSG:3857.
@@ -167,6 +180,8 @@ export function WmsSource({
   // rather than silently requesting Web Mercator, which they do not offer.
   const showCrsUnsupportedNote =
     isTauri() && reprojectableReady && advertisedCrs.length > 0 && crsChoices.length === 0;
+  // The saved or picked CRS cannot be drawn and the layers offer nothing else.
+  const showPickUnsupportedNote = pickUndrawable && advertisedCrs.length === 0;
   // Guards against a stale in-flight retrieval overwriting the form after the
   // user has moved on: a monotonic token identifies the latest request, and the
   // AbortController cancels the previous one when a new request or an endpoint
@@ -513,6 +528,11 @@ export function WmsSource({
         ) : null}
         {showCrsUnsupportedNote ? (
           <p className="text-xs text-muted-foreground">{t("addData.wms.crsUnsupported")}</p>
+        ) : null}
+        {showPickUnsupportedNote ? (
+          <p className="text-xs text-muted-foreground">
+            {t("addData.wms.crsPickUnsupported", { crs: usablePick })}
+          </p>
         ) : null}
         <label className="flex items-center gap-2 text-sm">
           <input
