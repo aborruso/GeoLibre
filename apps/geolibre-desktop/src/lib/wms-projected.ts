@@ -88,6 +88,18 @@ function resolveProjection(code: string): Promise<Projection | null> {
   return projection;
 }
 
+/**
+ * Whether the desktop tile protocol can reproject tiles requested in `code`:
+ * Web Mercator, the geographic CRSs of the strip path, or an EPSG code the
+ * bundled EPSG tables resolve. Any other CRS would be requested with a Web
+ * Mercator BBOX, which the server rejects or draws in the wrong place.
+ */
+export async function canReprojectWmsCrs(code: string): Promise<boolean> {
+  const upper = code.trim().toUpperCase();
+  if (WEB_MERCATOR_CRS.has(upper) || GEOGRAPHIC_WMS_CRS.has(upper)) return true;
+  return (await resolveProjection(upper)) !== null;
+}
+
 function distance([x1, y1]: Point, [x2, y2]: Point): number {
   return Math.hypot(x2 - x1, y2 - y1);
 }

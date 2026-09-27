@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import proj4 from "proj4";
 import {
+  canReprojectWmsCrs,
   projectedWmsRequest,
   sourcePixelMap,
   warpToMercator,
@@ -86,6 +87,22 @@ test("WMS 1.3.0 puts northing first for a CRS whose EPSG axis order is north-eas
   assert.deepEqual(bboxOf(northFirst.url), [minN, minE, maxN, maxE]);
   // WMS 1.1.1 is always x,y.
   assert.deepEqual(bboxOf(oldVersion.url), [minE, minN, maxE, maxN]);
+});
+
+test("canReprojectWmsCrs accepts only CRSs the tile protocol can draw", async () => {
+  for (const crs of [
+    "EPSG:3857",
+    "EPSG:900913",
+    "CRS:84",
+    "EPSG:6706",
+    "epsg:25832",
+    "EPSG:3003",
+  ]) {
+    assert.equal(await canReprojectWmsCrs(crs), true, crs);
+  }
+  for (const crs of ["EPSG:999999", "EPSG:1"]) {
+    assert.equal(await canReprojectWmsCrs(crs), false, crs);
+  }
 });
 
 test("projectedWmsRequest leaves Web Mercator, geographic and unknown CRSs alone", async () => {

@@ -15,12 +15,14 @@ import {
   isServiceFormUrl,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
+  stripOgcOperationParams,
   wmsCrsChoices,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
 import { routeWmsLayerThroughNativeProtocol } from "../../../../lib/xyz-url";
 import { isHttpWmsUrl } from "../../../../lib/native-wms-url";
+import { canReprojectWmsCrs } from "../../../../lib/wms-projected";
 import { isTauri } from "../../../../lib/tauri-io";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
@@ -44,6 +46,24 @@ interface WmsFormCache {
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
+
+/**
+ * Drops from each layer the CRS codes the desktop tile protocol cannot
+ * reproject (an EPSG code missing from its tables), so the selector offers
+ * only CRSs that draw.
+ */
+async function keepReprojectableCrs(options: WmsLayerOption[]): Promise<WmsLayerOption[]> {
+  const codes = [...new Set(options.flatMap((option) => option.crs ?? []))];
+  const supported = new Set<string>();
+  await Promise.all(
+    codes.map(async (code) => {
+      if (await canReprojectWmsCrs(code)) supported.add(code);
+    }),
+  );
+  return options.map((option) =>
+    option.crs ? { ...option, crs: option.crs.filter((code) => supported.has(code)) } : option,
+  );
+}
 
 export function WmsSource({
   initialUrl = "",
@@ -167,9 +187,13 @@ export function WmsSource({
     setIsRetrieving(true);
     setRetrieveError(null);
     try {
-      const { layers: options, version } = await fetchWmsCapabilities(endpoint, {
+      const capabilities = await fetchWmsCapabilities(endpoint, {
         signal: controller.signal,
       });
+      const { version } = capabilities;
+      const options = isTauri()
+        ? await keepReprojectableCrs(capabilities.layers)
+        : capabilities.layers;
       if (isStale()) return;
       if (options.length === 0) {
         setLayerOptions([]);
@@ -198,6 +222,9 @@ export function WmsSource({
     }
   };
 
+  // The web build cannot pick a CRS but keeps one set on desktop, so saving a
+  // service there again does not drop it.
+  const savedCrs = isTauri() ? wmsCrs : wmsCrsPick;
   const getFields = (): ServiceFields => ({
     endpoint: wmsEndpoint,
     layers: wmsLayers,
@@ -207,8 +234,10 @@ export function WmsSource({
     tileSize: wmsTileSize,
     // Only persist the version when it has an explicit source; an untouched
     // default stays eligible for URL/capabilities auto-detection on reload.
-    ...(versionTouched ? { version: wmsVersion } : {}),
-    ...(wmsCrs !== "EPSG:3857" ? { crs: wmsCrs } : {}),
+    // CRS:84 exists only in WMS 1.3.0, so it keeps the version it needs even
+    // when the version came from capabilities auto-detection.
+    ...(versionTouched || savedCrs === "CRS:84" ? { version: wmsVersion } : {}),
+    ...(savedCrs && savedCrs !== "EPSG:3857" ? { crs: savedCrs } : {}),
   });
 
   const applyFields = (fields: ServiceFields) => {
@@ -228,7 +257,7 @@ export function WmsSource({
     const detectedVersion = wmsVersionFromEndpoint(endpoint);
     setWmsVersion(normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"));
     markVersionTouched(Boolean(savedVersion || detectedVersion));
-    setWmsCrsPick(serviceFieldString(fields, "crs"));
+    setWmsCrsPick(serviceFieldString(fields, "crs").trim().toUpperCase());
     // The new endpoint's layers must be re-retrieved, so drop the old list and
     // cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
@@ -312,6 +341,14 @@ export function WmsSource({
                 if (serviceChanged) {
                   setWmsVersion(detected ?? "1.1.1");
                   markVersionTouched(detected != null);
+                }
+                // The CRS belongs to the service, and a query parameter can
+                // select a different one on the same path (MapServer's `map=`):
+                // compare everything but the WMS operation parameters.
+                if (
+                  stripOgcOperationParams(value.trim(), "WMS") !==
+                  stripOgcOperationParams(previous.trim(), "WMS")
+                ) {
                   setWmsCrsPick("");
                 } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
                   setWmsVersion(detected);

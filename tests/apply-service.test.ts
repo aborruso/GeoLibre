@@ -407,6 +407,16 @@ describe("applyServiceEntry", () => {
     assert.equal(added[0].beforeLayerId, "layer-2");
   });
 
+  it("keeps a saved WMS CRS out of the web build, which cannot reproject it", async () => {
+    const { added, deps } = stubDeps();
+    await applyServiceEntry(
+      entry("wms", { endpoint: "https://e/wms", layers: "a", crs: "EPSG:25832" }),
+      deps,
+    );
+    const source = added[0].layer.source as Record<string, unknown>;
+    assert.match((source.tiles as string[])[0], /[?&]SRS=EPSG%3A3857/);
+  });
+
   it("adds a WMTS layer through the store", async () => {
     const { added, deps } = stubDeps();
     await applyServiceEntry(entry("wmts", { url: "https://t/{z}/{x}/{y}" }), deps);
