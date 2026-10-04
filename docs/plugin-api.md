@@ -782,6 +782,13 @@ app.addWmsLayer?.("Cadastral parcels", {
   crs: "EPSG:6706",
 });
 
+// The capabilities mark the layer queryable="0": identify skips it.
+app.addWmsLayer?.("Buildings", {
+  url: "https://wms.example.it/wms",
+  layers: "buildings",
+  queryable: false,
+});
+
 // A layer found in a catalogue: keep its provenance with it.
 app.addWmsLayer?.("Bathymetry", {
   url: "https://wms.example.org/wms",

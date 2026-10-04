@@ -59,6 +59,16 @@ export function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
 }
 
+/**
+ * Whether a WMS layer answers GetFeatureInfo. Only `source.queryable: false`,
+ * written when the capabilities mark every requested layer `queryable="0"`,
+ * says no; a layer without the information (added by URL, an older project) is
+ * queried as before (#2887).
+ */
+export function isWmsQueryable(layer: GeoLibreLayer): boolean {
+  return layer.source.queryable !== false;
+}
+
 export function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
   return typeof window === "undefined"
     ? undefined
@@ -257,6 +267,16 @@ function isWmsExceptionResponse(value: string): boolean {
   return /<([\w:]+)?(ServiceException|ExceptionReport)\b/i.test(value);
 }
 
+/** The text of a WMS/OWS exception report, without its XML and CDATA wrapping. */
+function wmsExceptionMessage(value: string): string {
+  const match =
+    /<(?:[\w-]+:)?(ServiceException|ExceptionText)\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?\1>/i.exec(
+      value,
+    );
+  const inner = match?.[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  return normalizeText(inner ?? "") || normalizeText(value);
+}
+
 function parseWmsJsonProperties(value: unknown): {
   featureId?: string | number;
   properties: Record<string, unknown>;
@@ -317,7 +337,9 @@ function parseWmsJsonProperties(value: unknown): {
  * @param lngLat The clicked position.
  * @param zoom The map zoom, which sets the query box's resolution.
  * @param signal Aborts the request when a newer click supersedes it.
- * @returns The first feature's id and properties, a text result, or null.
+ * @returns The first feature's id and properties, a text result, or null
+ *   (also, without a request, for a layer that is not queryable).
+ * @throws Error when every format probed came back as a WMS exception.
  */
 export async function fetchWmsIdentifyProperties(
   layer: GeoLibreLayer,
@@ -328,7 +350,11 @@ export async function fetchWmsIdentifyProperties(
   featureId?: string | number;
   properties: Record<string, unknown>;
 } | null> {
+  if (!isWmsQueryable(layer)) return null;
   let fallbackText = "";
+  // A WMS exception is the server refusing the request, not the feature's data:
+  // kept apart so it surfaces as an error when no format gave anything else.
+  let exceptionText = "";
 
   // Honor an explicitly configured INFO_FORMAT so we issue a single request
   // instead of probing JSON/HTML/plain-text in sequence.
@@ -368,7 +394,7 @@ export async function fetchWmsIdentifyProperties(
     // Only run the XML exception check on bodies that are not JSON, so a JSON
     // response that merely mentions "ServiceException" is not misread as one.
     if (!looksLikeJson && isWmsExceptionResponse(text)) {
-      fallbackText = normalizeText(text);
+      exceptionText = wmsExceptionMessage(text);
       continue;
     }
 
@@ -380,7 +406,9 @@ export async function fetchWmsIdentifyProperties(
         // so an unrecognized-but-real response isn't silently discarded.
         fallbackText = fallbackText || normalizeText(text);
       } catch {
-        fallbackText = normalizeText(text);
+        // A JSON probe often gets the server's XML exception back.
+        if (isWmsExceptionResponse(text)) exceptionText = wmsExceptionMessage(text);
+        else fallbackText = normalizeText(text);
       }
       continue;
     }
@@ -406,7 +434,9 @@ export async function fetchWmsIdentifyProperties(
     fallbackText = resultText;
   }
 
-  return fallbackText ? { properties: { result: fallbackText } } : null;
+  if (fallbackText) return { properties: { result: fallbackText } };
+  if (exceptionText) throw new Error(`WMS GetFeatureInfo returned an error: ${exceptionText}`);
+  return null;
 }
 
 export function isAbortError(error: unknown): boolean {

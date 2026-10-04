@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   fetchWmsIdentifyProperties,
   isPixelIdentifyLayer,
+  isWmsQueryable,
   pixelIdentifyProperties,
 } from "../packages/map/src/identify-sources";
 import { geojsonLayer } from "./helpers/layer-fixtures";
@@ -71,6 +72,52 @@ describe("fetchWmsIdentifyProperties", () => {
     } finally {
       globalThis.DOMParser = original;
     }
+  });
+});
+
+describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
+  const exception = `<?xml version="1.0" encoding="ISO-8859-1"?><ServiceExceptionReport version="1.1.1"><ServiceException code="LayerNotQueryable"><![CDATA[Layer buildings is not queryable]]></ServiceException></ServiceExceptionReport>`;
+
+  it("sends no request for a layer marked not queryable", async () => {
+    const urls = stubFetch("unused", "text/plain");
+    const layer = wmsLayer({ queryable: false });
+    assert.equal(isWmsQueryable(layer), false);
+    assert.equal(isWmsQueryable(wmsLayer()), true);
+    const result = await fetchWmsIdentifyProperties(
+      layer,
+      [0, 0],
+      10,
+      new AbortController().signal,
+    );
+    assert.equal(result, null);
+    assert.deepEqual(urls, []);
+  });
+
+  it("reports a WMS exception as an error, not as the feature's data", async () => {
+    stubFetch(exception, "application/vnd.ogc.se_xml");
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo returned an error: Layer buildings is not queryable$/,
+    );
+  });
+
+  it("still returns a format that answered when another one raised an exception", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      return url.includes("text%2Fplain")
+        ? new Response("Feature 1: name = Road", { headers: { "content-type": "text/plain" } })
+        : new Response(exception, { headers: { "content-type": "text/xml" } });
+    }) as typeof fetch;
+    const result = await fetchWmsIdentifyProperties(
+      wmsLayer(),
+      [0, 0],
+      10,
+      new AbortController().signal,
+    );
+    assert.deepEqual(result, { properties: { result: "Feature 1: name = Road" } });
+    assert.equal(urls.length, 3);
   });
 });
 
