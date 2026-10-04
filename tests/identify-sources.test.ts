@@ -222,7 +222,6 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     assert.equal(throwing.params.get("CRS"), "EPSG:3857");
 });
 });
-
 describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
   const exception = `<?xml version="1.0" encoding="ISO-8859-1"?><ServiceExceptionReport version="1.1.1"><ServiceException code="LayerNotQueryable"><![CDATA[Layer buildings is not queryable]]></ServiceException></ServiceExceptionReport>`;
 
