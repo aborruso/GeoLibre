@@ -302,6 +302,21 @@ describe("fetchWmsIdentifyProperties with HTML tables", () => {
     });
   });
 
+  it("keeps fields named like Object members, and suffixes a name repeated in one table", async () => {
+    const result = await identifyHtml(`
+      <table>
+        <tr><th>constructor</th><td>ACME</td></tr>
+        <tr><th>__proto__</th><td>kept</td></tr>
+        <tr><th>note</th><td>first</td></tr>
+        <tr><th>note</th><td>second</td></tr>
+      </table>`);
+    const properties = result?.properties ?? {};
+    assert.deepEqual(Object.keys(properties), ["constructor", "__proto__", "note", "note (2)"]);
+    assert.equal(Object.getOwnPropertyDescriptor(properties, "constructor")?.value, "ACME");
+    assert.equal(Object.getOwnPropertyDescriptor(properties, "__proto__")?.value, "kept");
+    assert.equal(properties["note (2)"], "second");
+  });
+
   it("reads a one-column header over one cell as text, not as a field", async () => {
     const result = await identifyHtml(
       "<table><tr><th>Roads</th></tr><tr><td>no hit</td></tr></table>",

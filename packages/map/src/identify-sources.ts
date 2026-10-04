@@ -373,6 +373,22 @@ function cellText(cell: Element): string {
   return normalizeText(cell.textContent ?? "");
 }
 
+/**
+ * Sets `name` on `target`, as `name (2)`, `name (3)`... when it is already
+ * taken. Own keys only, and defined rather than assigned, so a field named
+ * `constructor` or `__proto__` keeps its name and its value.
+ */
+function addProperty(target: Record<string, string>, name: string, value: string): void {
+  let key = name;
+  for (let copy = 2; Object.hasOwn(target, key); copy += 1) key = `${name} (${copy})`;
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
 function isRowOf(cells: Element[], tag: string): boolean {
   return cells.length > 0 && cells.every((cell) => cell.localName === tag);
 }
@@ -397,7 +413,7 @@ function tableProperties(table: Element): Record<string, string> | null {
   for (const cells of rows) {
     if (cells.length !== 2 || cells[0].localName !== "th" || cells[1].localName !== "td") continue;
     const name = cellText(cells[0]);
-    if (name) pairs[name] = cellText(cells[1]);
+    if (name) addProperty(pairs, name, cellText(cells[1]));
   }
   if (Object.keys(pairs).length > 0) return pairs;
 
@@ -415,7 +431,7 @@ function tableProperties(table: Element): Record<string, string> | null {
   const columns: Record<string, string> = {};
   header.forEach((cell, index) => {
     const name = cellText(cell);
-    if (name) columns[name] = cellText(values[index]);
+    if (name) addProperty(columns, name, cellText(values[index]));
   });
   return Object.keys(columns).length > 0 ? columns : null;
 }
@@ -424,7 +440,7 @@ function tableProperties(table: Element): Record<string, string> | null {
  * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888),
  * see tableProperties. A request for several layers can get one table per
  * layer: their fields are merged, a name already taken getting a ` (2)`,
- * ` (3)` suffix. Null when no table has either shape.
+ * ` (3)` suffix, as within one table. Null when no table has either shape.
  */
 function propertiesFromHtmlTables(document: Document): Record<string, string> | null {
   const merged: Record<string, string> = {};
@@ -434,9 +450,7 @@ function propertiesFromHtmlTables(document: Document): Record<string, string> | 
   );
   for (const table of tables) {
     for (const [name, value] of Object.entries(tableProperties(table) ?? {})) {
-      let key = name;
-      for (let copy = 2; key in merged; copy += 1) key = `${name} (${copy})`;
-      merged[key] = value;
+      addProperty(merged, name, value);
     }
   }
   return Object.keys(merged).length > 0 ? merged : null;
