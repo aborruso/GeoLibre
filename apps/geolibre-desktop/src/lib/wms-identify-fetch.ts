@@ -55,16 +55,12 @@ export function createNativeWmsIdentifyFetcher(fetchBytes: FetchBytes): WmsIdent
  * Loaded lazily and only in the desktop build.
  */
 export async function installNativeWmsIdentifyFetch(): Promise<void> {
-  const [
-    { setWmsIdentifyFetcher, setWmsIdentifyProjectionResolver },
-    { fetchUrlBytes },
-    { resolveProjection },
-  ] = await Promise.all([
-    import("@geolibre/map"),
-    import("./native-http"),
-    import("./wms-projected"),
-  ]);
+  const [{ setWmsIdentifyFetcher, setWmsIdentifyProjectionResolver }, { resolveProjection }] =
+    await Promise.all([import("@geolibre/map"), import("./wms-projected")]);
+  // Installed before the native client loads, so a failure there still leaves
+  // projected layers queried in their own CRS.
   setWmsIdentifyProjectionResolver(resolveProjection);
+  const { fetchUrlBytes } = await import("./native-http");
   setWmsIdentifyFetcher(
     createNativeWmsIdentifyFetcher((url) =>
       fetchUrlBytes(url, { context: "WMS GetFeatureInfo", maxBytes: WMS_IDENTIFY_MAX_BYTES }),
