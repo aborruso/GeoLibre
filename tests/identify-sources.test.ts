@@ -267,6 +267,30 @@ describe("fetchWmsIdentifyProperties with HTML tables", () => {
     assert.deepEqual(result, { properties: { fid: "roads.7", name: "Via Roma", lanes: "2" } });
   });
 
+  it("uses the header right above the data, not a decorative one", async () => {
+    const result = await identifyHtml(`
+      <table>
+        <tr><th>roads</th><th>layer</th></tr>
+        <tr><th>fid</th><th>name</th><th>lanes</th></tr>
+        <tr><td>roads.7</td><td>Via Roma</td><td>2</td></tr>
+      </table>`);
+    assert.deepEqual(result, { properties: { fid: "roads.7", name: "Via Roma", lanes: "2" } });
+  });
+
+  it("ignores the rows of a table nested in a cell", async () => {
+    const result = await identifyHtml(`
+      <table>
+        <tr><th>name</th><td>Via Roma</td></tr>
+        <tr><th>surface</th><td>
+          <table><tr><th>material</th><td>asphalt</td></tr></table>
+        </td></tr>
+      </table>`);
+    assert.equal(result?.properties.name, "Via Roma");
+    // The nested table stays the outer cell's text.
+    assert.match(String(result?.properties.surface), /asphalt/);
+    assert.equal("material" in (result?.properties ?? {}), false);
+  });
+
   it("keeps the text result when no table has either shape", async () => {
     assert.deepEqual(await identifyHtml("<p>Road  42</p>"), { properties: { result: "Road 42" } });
     // A header with no data row below it says nothing about a feature.

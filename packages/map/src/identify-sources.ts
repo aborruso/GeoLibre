@@ -373,19 +373,27 @@ function cellText(cell: Element): string {
   return normalizeText(cell.textContent ?? "");
 }
 
+function isRowOf(cells: Element[], tag: string): boolean {
+  return cells.length > 0 && cells.every((cell) => cell.localName === tag);
+}
+
 /**
  * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888):
- * one property per `<th>name</th><td>value</td>` row or, for a table whose
- * first full row is all `<th>`, the header naming the cells of the first data
- * row below it. Rows of any other shape, such as a title spanning the table,
- * are skipped. Null when no table has either shape.
+ * one property per `<th>name</th><td>value</td>` row or, for a table with a
+ * column header, the header naming the cells of the first data row: the first
+ * all-`<td>` row right below an all-`<th>` row of the same length. Rows of any
+ * other shape, such as a title spanning the table, are skipped, and so are the
+ * rows of a table nested in a cell. Null when no table has either shape.
  */
 function propertiesFromHtmlTables(document: Document): Record<string, string> | null {
   for (const table of Array.from(document.querySelectorAll("table"))) {
-    const rows = Array.from(table.querySelectorAll("tr")).map((row) =>
-      Array.from(row.children).filter((cell) => cell.localName === "th" || cell.localName === "td"),
-    );
-    const isRow = (cells: Element[], tag: string) => cells.every((cell) => cell.localName === tag);
+    const rows = Array.from(table.querySelectorAll("tr"))
+      .filter((row) => row.closest("table") === table)
+      .map((row) =>
+        Array.from(row.children).filter(
+          (cell) => cell.localName === "th" || cell.localName === "td",
+        ),
+      );
 
     const pairs: Record<string, string> = {};
     for (const cells of rows) {
@@ -396,13 +404,17 @@ function propertiesFromHtmlTables(document: Document): Record<string, string> | 
     }
     if (Object.keys(pairs).length > 0) return pairs;
 
-    const headerIndex = rows.findIndex((cells) => cells.length > 1 && isRow(cells, "th"));
-    if (headerIndex < 0) continue;
-    const header = rows[headerIndex];
-    const values = rows
-      .slice(headerIndex + 1)
-      .find((cells) => cells.length === header.length && isRow(cells, "td"));
-    if (!values) continue;
+    const valuesIndex = rows.findIndex(
+      (cells, index) =>
+        index > 0 &&
+        cells.length > 1 &&
+        isRowOf(cells, "td") &&
+        rows[index - 1].length === cells.length &&
+        isRowOf(rows[index - 1], "th"),
+    );
+    if (valuesIndex < 0) continue;
+    const header = rows[valuesIndex - 1];
+    const values = rows[valuesIndex];
     const columns: Record<string, string> = {};
     header.forEach((cell, index) => {
       const name = cellText(cell);
