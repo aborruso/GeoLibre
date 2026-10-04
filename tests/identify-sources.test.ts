@@ -219,6 +219,61 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     }) as never);
     const throwing = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
     assert.equal(throwing.params.get("CRS"), "EPSG:3857");
+
+// An HTML answer carries its attributes in a table; read it into fields
+// instead of one run-together `result` (#2888).
+describe("fetchWmsIdentifyProperties with HTML tables", () => {
+  async function identifyHtml(body: string) {
+    stubFetch(`<html><body>${body}</body></html>`, "text/html");
+    const original = globalThis.DOMParser;
+    globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+    try {
+      return await fetchWmsIdentifyProperties(
+        wmsLayer({ infoFormat: "text/html" }),
+        [12.5973, 42.2979],
+        16,
+        new AbortController().signal,
+      );
+    } finally {
+      globalThis.DOMParser = original;
+    }
+  }
+
+  it("reads name/value rows, skipping a title row (Agenzia delle Entrate cadastre)", async () => {
+    const result = await identifyHtml(`
+      <table class="wmstable"><tbody>
+        <tr><th colspan=7>Strato CP.CadastralParcel 'Particelle'</th></tr>
+        <tr><th scope="col">InspireId localId</th><td>IT.AGE.PLA.D689_000400.751</td></tr>
+        <tr><th scope="col">Label</th><td>751</td></tr>
+        <tr><th scope="col">NationalCadastralReference</th><td> D689_000400.751 </td></tr>
+      </tbody></table>`);
+    assert.deepEqual(result, {
+      properties: {
+        "InspireId localId": "IT.AGE.PLA.D689_000400.751",
+        Label: "751",
+        NationalCadastralReference: "D689_000400.751",
+      },
+    });
+  });
+
+  it("reads a header row naming the cells of the first data row", async () => {
+    const result = await identifyHtml(`
+      <table>
+        <caption>roads</caption>
+        <tr><th>fid</th><th>name</th><th>lanes</th></tr>
+        <tr><td>roads.7</td><td>Via Roma</td><td>2</td></tr>
+        <tr><td>roads.8</td><td>Via Milano</td><td>4</td></tr>
+      </table>`);
+    assert.deepEqual(result, { properties: { fid: "roads.7", name: "Via Roma", lanes: "2" } });
+  });
+
+  it("keeps the text result when no table has either shape", async () => {
+    assert.deepEqual(await identifyHtml("<p>Road  42</p>"), { properties: { result: "Road 42" } });
+    // A header with no data row below it says nothing about a feature.
+    const headerOnly = await identifyHtml(
+      "<table><tr><th>fid</th><th>name</th></tr></table><p>no hit</p>",
+    );
+    assert.deepEqual(Object.keys(headerOnly?.properties ?? {}), ["result"]);
   });
 });
 
