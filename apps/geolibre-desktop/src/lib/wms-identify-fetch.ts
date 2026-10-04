@@ -49,14 +49,22 @@ export function createNativeWmsIdentifyFetcher(fetchBytes: FetchBytes): WmsIdent
  * (WebView2 serves the app from `http://tauri.localhost`), so a server without
  * `Access-Control-Allow-Origin`, or an https-to-http redirect without it,
  * failed identify with "Failed to fetch" while its tiles drew fine (#2712).
+ * Also installs the EPSG lookup of the tile protocol, so a layer drawn in a
+ * projected CRS is queried in that CRS (#2886).
  *
  * Loaded lazily and only in the desktop build.
  */
 export async function installNativeWmsIdentifyFetch(): Promise<void> {
-  const [{ setWmsIdentifyFetcher }, { fetchUrlBytes }] = await Promise.all([
+  const [
+    { setWmsIdentifyFetcher, setWmsIdentifyProjectionResolver },
+    { fetchUrlBytes },
+    { resolveProjection },
+  ] = await Promise.all([
     import("@geolibre/map"),
     import("./native-http"),
+    import("./wms-projected"),
   ]);
+  setWmsIdentifyProjectionResolver(resolveProjection);
   setWmsIdentifyFetcher(
     createNativeWmsIdentifyFetcher((url) =>
       fetchUrlBytes(url, { context: "WMS GetFeatureInfo", maxBytes: WMS_IDENTIFY_MAX_BYTES }),

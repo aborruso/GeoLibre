@@ -53,9 +53,10 @@ const projections = new Map<string, Promise<Projection | null>>();
 
 /**
  * The projection for an `EPSG:n` CRS, resolved offline from the bundled EPSG
- * tables (epsg-proj4.ts), or null when the code is unknown.
+ * tables (epsg-proj4.ts), or null when the code is unknown. WMS identify uses it
+ * too, so GetFeatureInfo goes out in the CRS the tiles are drawn in.
  */
-function resolveProjection(code: string): Promise<Projection | null> {
+export function resolveProjection(code: string): Promise<Projection | null> {
   let projection = projections.get(code);
   if (!projection) {
     projection = (async () => {

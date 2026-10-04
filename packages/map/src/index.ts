@@ -212,4 +212,10 @@ export {
 } from "./qml-export";
 export { applyQmlImport, parseQml, type QmlImportResult } from "./qml-import";
 export { loadMarkerSvgImage, markerIconSizeValue, renderMarkerCanvas } from "./markers";
-export { setWmsIdentifyFetcher, type WmsIdentifyFetcher } from "./identify-sources";
+export {
+  setWmsIdentifyFetcher,
+  setWmsIdentifyProjectionResolver,
+  type WmsIdentifyFetcher,
+  type WmsIdentifyProjection,
+  type WmsIdentifyProjectionResolver,
+} from "./identify-sources";

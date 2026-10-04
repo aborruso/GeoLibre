@@ -148,10 +148,113 @@ function wmsIdentifyResolution(zoom: number): number {
   return WEB_MERCATOR_WORLD_SIZE / (MAPLIBRE_TILE_SIZE * 2 ** normalizedZoom);
 }
 
-function wmsIdentifyBbox3857(lngLat: [number, number], zoom: number): string {
+function wmsIdentifyBbox3857(lngLat: [number, number], zoom: number): number[] {
   const [centerX, centerY] = lngLatToWebMercator(lngLat[0], lngLat[1]);
   const halfSpan = (WMS_IDENTIFY_QUERY_SIZE * wmsIdentifyResolution(zoom)) / 2;
-  return [centerX - halfSpan, centerY - halfSpan, centerX + halfSpan, centerY + halfSpan].join(",");
+  return [centerX - halfSpan, centerY - halfSpan, centerX + halfSpan, centerY + halfSpan];
+}
+
+function webMercatorToLngLat(x: number, y: number): [number, number] {
+  const lng = (x / WEB_MERCATOR_EARTH_RADIUS) * (180 / Math.PI);
+  const lat = Math.atan(Math.sinh(y / WEB_MERCATOR_EARTH_RADIUS)) * (180 / Math.PI);
+  return [lng, lat];
+}
+
+/** Longitude/latitude to x/y in a WMS layer's CRS, with that CRS's EPSG axis order. */
+export interface WmsIdentifyProjection {
+  forward: (lngLat: [number, number]) => [number, number];
+  /** Whether the EPSG axis order is north first: WMS 1.3.0 writes the BBOX that way. */
+  northFirst: boolean;
+}
+
+/** Resolves an `EPSG:<code>` CRS, or null when it is unknown. */
+export type WmsIdentifyProjectionResolver = (crs: string) => Promise<WmsIdentifyProjection | null>;
+
+let wmsIdentifyProjectionResolver: WmsIdentifyProjectionResolver | null = null;
+
+/**
+ * Lets GetFeatureInfo reach a WMS layer drawn in a projected CRS. The desktop
+ * tile protocol reprojects such layers with its bundled EPSG tables, which this
+ * package does not carry, so the desktop installs the same lookup here.
+ *
+ * @param resolver The resolver to use, or null to remove it.
+ */
+export function setWmsIdentifyProjectionResolver(
+  resolver: WmsIdentifyProjectionResolver | null,
+): void {
+  wmsIdentifyProjectionResolver = resolver;
+}
+
+// Mirrors GEOGRAPHIC_WMS_CRS in the desktop's wms-geographic.ts: the CRSs whose
+// tiles the desktop requests in degrees without the EPSG tables.
+const GEOGRAPHIC_WMS_CRS = new Set(["EPSG:4326", "EPSG:4258", "EPSG:6706", "CRS:84"]);
+const WEB_MERCATOR_CRS = new Set(["EPSG:3857", "EPSG:900913"]);
+
+/**
+ * The CRS the layer's GetMap tiles are requested in: `source.crs`, or else the
+ * CRS/SRS of the tile template, where Python's `wms_layer` and the MCP tools
+ * write it. The desktop wraps the template as `geolibre-wms://tile?url=...`.
+ */
+function wmsLayerCrs(layer: GeoLibreLayer): string | undefined {
+  const crs = stringSource(layer.source.crs);
+  if (crs) return crs;
+  const tiles = layer.source.tiles;
+  const template = Array.isArray(tiles) ? stringSource(tiles[0]) : undefined;
+  if (!template) return undefined;
+  try {
+    let params = new URL(template).searchParams;
+    const wrapped = params.get("url");
+    if (wrapped && /^https?:\/\//i.test(wrapped)) params = new URL(wrapped).searchParams;
+    for (const [key, value] of params) {
+      if (key.toLowerCase() === "crs" || key.toLowerCase() === "srs") return stringSource(value);
+    }
+  } catch {
+    // Not an absolute URL: no CRS to read.
+  }
+  return undefined;
+}
+
+/**
+ * The CRS and BBOX of the identify query, in the CRS the layer's tiles are
+ * requested in (see wmsLayerCrs): a server that offers no EPSG:3857 rejects
+ * GetFeatureInfo in it as it rejects GetMap (#2886). The box keeps the click at
+ * its center pixel and covers about the same ground as the Web Mercator one.
+ * Without a CRS, or with one that cannot be resolved, the query stays in
+ * EPSG:3857, as before.
+ */
+async function wmsIdentifyQueryBox(
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  zoom: number,
+  isV13: boolean,
+): Promise<{ crs: string; bbox: number[] }> {
+  const mercator = wmsIdentifyBbox3857(lngLat, zoom);
+  const crs = wmsLayerCrs(layer)?.trim().toUpperCase();
+  if (!crs || WEB_MERCATOR_CRS.has(crs)) return { crs: "EPSG:3857", bbox: mercator };
+
+  // WMS 1.3.0 follows the EPSG axis order, latitude first, except for CRS:84.
+  const projection: WmsIdentifyProjection | null = GEOGRAPHIC_WMS_CRS.has(crs)
+    ? { forward: (point) => point, northFirst: crs !== "CRS:84" }
+    : ((await wmsIdentifyProjectionResolver?.(crs)) ?? null);
+  if (!projection) return { crs: "EPSG:3857", bbox: mercator };
+
+  const [minX, minY, maxX, maxY] = mercator;
+  const corners = [
+    [minX, minY],
+    [minX, maxY],
+    [maxX, minY],
+    [maxX, maxY],
+  ].map(([x, y]) => projection.forward(webMercatorToLngLat(x, y)));
+  const xs = corners.map(([x]) => x);
+  const ys = corners.map(([, y]) => y);
+  const halfX = (Math.max(...xs) - Math.min(...xs)) / 2;
+  const halfY = (Math.max(...ys) - Math.min(...ys)) / 2;
+  const [x, y] = projection.forward(lngLat);
+  const bbox =
+    isV13 && projection.northFirst
+      ? [y - halfY, x - halfX, y + halfY, x + halfX]
+      : [x - halfX, y - halfY, x + halfX, y + halfY];
+  return { crs, bbox };
 }
 
 function isViteDevServer(): boolean {
@@ -198,12 +301,12 @@ function fetchWmsIdentifyResponse(url: string, signal: AbortSignal): Promise<Res
     : fetch(proxyWmsRequestUrl(url), { signal });
 }
 
-function createWmsGetFeatureInfoUrl(
+async function createWmsGetFeatureInfoUrl(
   layer: GeoLibreLayer,
   lngLat: [number, number],
   zoom: number,
   infoFormat: string,
-): string | null {
+): Promise<string | null> {
   const endpoint = stringSource(layer.source.url) ?? layer.sourcePath;
   const layers = stringSource(layer.source.layers);
   if (!endpoint || !layers) return null;
@@ -211,11 +314,11 @@ function createWmsGetFeatureInfoUrl(
   const styles = stringSource(layer.source.styles) ?? "";
   const format = stringSource(layer.source.format) ?? "image/png";
   // WMS 1.3.0 renames the SRS parameter to CRS and the pixel coordinates from
-  // X/Y to I/J. EPSG:3857 keeps easting/northing axis order across both
-  // versions, so the BBOX layout is unchanged.
+  // X/Y to I/J; wmsIdentifyQueryBox writes the BBOX in that version's axis order.
   const version = stringSource(layer.source.version) ?? "1.1.1";
   const isV13 = version.startsWith("1.3");
   const crsParam = isV13 ? "CRS" : "SRS";
+  const query = await wmsIdentifyQueryBox(layer, lngLat, zoom, isV13);
   // Treat a deliberate featureCount of 0 ("all features" on some servers) as
   // intentional; only fall back to 1 when it is unset (null/undefined), blank,
   // or non-numeric. Number(null) and Number("") are both 0, so guard those.
@@ -233,8 +336,8 @@ function createWmsGetFeatureInfoUrl(
     ["STYLES", styles],
     ["FORMAT", format],
     ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
-    [crsParam, "EPSG:3857"],
-    ["BBOX", wmsIdentifyBbox3857(lngLat, zoom)],
+    [crsParam, query.crs],
+    ["BBOX", query.bbox.join(",")],
     ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
     ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
     [isV13 ? "I" : "X", String(WMS_IDENTIFY_QUERY_CENTER)],
@@ -336,7 +439,7 @@ export async function fetchWmsIdentifyProperties(
   const infoFormats = configuredFormat ? [configuredFormat] : WMS_IDENTIFY_INFO_FORMATS;
 
   for (const infoFormat of infoFormats) {
-    const targetUrl = createWmsGetFeatureInfoUrl(layer, lngLat, zoom, infoFormat);
+    const targetUrl = await createWmsGetFeatureInfoUrl(layer, lngLat, zoom, infoFormat);
     if (!targetUrl) return null;
 
     const response = await fetchWmsIdentifyResponse(targetUrl, signal);
