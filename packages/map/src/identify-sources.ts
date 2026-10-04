@@ -160,8 +160,12 @@ function webMercatorToLngLat(x: number, y: number): [number, number] {
   return [lng, lat];
 }
 
-/** Longitude/latitude to x/y in a WMS layer's CRS, with that CRS's EPSG axis order. */
+/** A WMS layer's CRS, as the identify query box needs it. */
 export interface WmsIdentifyProjection {
+  /**
+   * Longitude/latitude to easting/northing (or longitude/latitude) in the
+   * layer's CRS, always east first: the EPSG axis order is `northFirst`'s job.
+   */
   forward: (lngLat: [number, number]) => [number, number];
   /** Whether the EPSG axis order is north first: WMS 1.3.0 writes the BBOX that way. */
   northFirst: boolean;
@@ -235,7 +239,8 @@ async function wmsIdentifyQueryBox(
   // WMS 1.3.0 follows the EPSG axis order, latitude first, except for CRS:84.
   const projection: WmsIdentifyProjection | null = GEOGRAPHIC_WMS_CRS.has(crs)
     ? { forward: (point) => point, northFirst: crs !== "CRS:84" }
-    : ((await wmsIdentifyProjectionResolver?.(crs)) ?? null);
+    : // A resolver that throws is a CRS it cannot resolve, as when it returns null.
+      ((await wmsIdentifyProjectionResolver?.(crs).catch(() => null)) ?? null);
   if (!projection) return { crs: "EPSG:3857", bbox: mercator };
 
   const [minX, minY, maxX, maxY] = mercator;

@@ -184,6 +184,11 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     setWmsIdentifyProjectionResolver(async () => null);
     const unknown = await identifyQuery({ version: "1.3.0", crs: "EPSG:99999" }, [12.5, 42.5]);
     assert.equal(unknown.params.get("CRS"), "EPSG:3857");
+    setWmsIdentifyProjectionResolver(async () => {
+      throw new Error("unparsable proj4 definition");
+    });
+    const failing = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
+    assert.equal(failing.params.get("CRS"), "EPSG:3857");
   });
 });
 
