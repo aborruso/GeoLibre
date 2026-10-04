@@ -176,6 +176,24 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     assert.ok(near(center(native.bbox), [12.5, 42.5]));
   });
 
+  it("resolves the CRS once per click, not once per probed format", async () => {
+    let calls = 0;
+    setWmsIdentifyProjectionResolver(async () => {
+      calls += 1;
+      return { forward: ([lng, lat]) => [lng * 100000, lat * 100000], northFirst: false };
+    });
+    // An empty answer makes identify probe all three formats.
+    const urls = stubFetch("", "text/plain");
+    await fetchWmsIdentifyProperties(
+      wmsLayer({ version: "1.3.0", crs: "EPSG:25833" }),
+      [12.5, 42.5],
+      16,
+      new AbortController().signal,
+    );
+    assert.equal(urls.length, 3);
+    assert.equal(calls, 1);
+  });
+
   it("stays in EPSG:3857 without a CRS or with one it cannot resolve", async () => {
     const none = await identifyQuery({ version: "1.3.0" }, [12.5, 42.5]);
     assert.equal(none.params.get("CRS"), "EPSG:3857");
@@ -189,6 +207,12 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     });
     const failing = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
     assert.equal(failing.params.get("CRS"), "EPSG:3857");
+    // Not async: throws before returning a promise.
+    setWmsIdentifyProjectionResolver((() => {
+      throw new Error("unknown code");
+    }) as never);
+    const throwing = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
+    assert.equal(throwing.params.get("CRS"), "EPSG:3857");
   });
 });
 

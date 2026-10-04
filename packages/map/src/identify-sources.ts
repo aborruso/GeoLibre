@@ -239,8 +239,11 @@ async function wmsIdentifyQueryBox(
   // WMS 1.3.0 follows the EPSG axis order, latitude first, except for CRS:84.
   const projection: WmsIdentifyProjection | null = GEOGRAPHIC_WMS_CRS.has(crs)
     ? { forward: (point) => point, northFirst: crs !== "CRS:84" }
-    : // A resolver that throws is a CRS it cannot resolve, as when it returns null.
-      ((await wmsIdentifyProjectionResolver?.(crs).catch(() => null)) ?? null);
+    : // A resolver that throws, or rejects, is a CRS it cannot resolve, as when
+      // it returns null.
+      await Promise.resolve()
+        .then(() => wmsIdentifyProjectionResolver?.(crs) ?? null)
+        .catch(() => null);
   if (!projection) return { crs: "EPSG:3857", bbox: mercator };
 
   const [minX, minY, maxX, maxY] = mercator;
@@ -306,12 +309,15 @@ function fetchWmsIdentifyResponse(url: string, signal: AbortSignal): Promise<Res
     : fetch(proxyWmsRequestUrl(url), { signal });
 }
 
+/**
+ * The GetFeatureInfo URL for each INFO_FORMAT probed, or null when the layer
+ * has no endpoint or layer names. The query box is resolved once per click.
+ */
 async function createWmsGetFeatureInfoUrl(
   layer: GeoLibreLayer,
   lngLat: [number, number],
   zoom: number,
-  infoFormat: string,
-): Promise<string | null> {
+): Promise<((infoFormat: string) => string) | null> {
   const endpoint = stringSource(layer.source.url) ?? layer.sourcePath;
   const layers = stringSource(layer.source.layers);
   if (!endpoint || !layers) return null;
@@ -332,24 +338,25 @@ async function createWmsGetFeatureInfoUrl(
       ? Number(layer.source.featureCount)
       : NaN;
 
-  return appendWmsQuery(endpoint, [
-    ["SERVICE", "WMS"],
-    ["REQUEST", "GetFeatureInfo"],
-    ["VERSION", version],
-    ["LAYERS", layers],
-    ["QUERY_LAYERS", layers],
-    ["STYLES", styles],
-    ["FORMAT", format],
-    ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
-    [crsParam, query.crs],
-    ["BBOX", query.bbox.join(",")],
-    ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
-    ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
-    [isV13 ? "I" : "X", String(WMS_IDENTIFY_QUERY_CENTER)],
-    [isV13 ? "J" : "Y", String(WMS_IDENTIFY_QUERY_CENTER)],
-    ["INFO_FORMAT", infoFormat],
-    ["FEATURE_COUNT", String(Number.isFinite(featureCount) ? featureCount : 1)],
-  ]);
+  return (infoFormat) =>
+    appendWmsQuery(endpoint, [
+      ["SERVICE", "WMS"],
+      ["REQUEST", "GetFeatureInfo"],
+      ["VERSION", version],
+      ["LAYERS", layers],
+      ["QUERY_LAYERS", layers],
+      ["STYLES", styles],
+      ["FORMAT", format],
+      ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
+      [crsParam, query.crs],
+      ["BBOX", query.bbox.join(",")],
+      ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
+      ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
+      [isV13 ? "I" : "X", String(WMS_IDENTIFY_QUERY_CENTER)],
+      [isV13 ? "J" : "Y", String(WMS_IDENTIFY_QUERY_CENTER)],
+      ["INFO_FORMAT", infoFormat],
+      ["FEATURE_COUNT", String(Number.isFinite(featureCount) ? featureCount : 1)],
+    ]);
 }
 
 function normalizeText(value: string): string {
@@ -443,10 +450,11 @@ export async function fetchWmsIdentifyProperties(
   const configuredFormat = stringSource(layer.source.infoFormat);
   const infoFormats = configuredFormat ? [configuredFormat] : WMS_IDENTIFY_INFO_FORMATS;
 
-  for (const infoFormat of infoFormats) {
-    const targetUrl = await createWmsGetFeatureInfoUrl(layer, lngLat, zoom, infoFormat);
-    if (!targetUrl) return null;
+  const buildUrl = await createWmsGetFeatureInfoUrl(layer, lngLat, zoom);
+  if (!buildUrl) return null;
 
+  for (const infoFormat of infoFormats) {
+    const targetUrl = buildUrl(infoFormat);
     const response = await fetchWmsIdentifyResponse(targetUrl, signal);
     const contentTypeHeader = response.headers.get("content-type")?.toLowerCase();
     const contentType = contentTypeHeader ?? infoFormat;
