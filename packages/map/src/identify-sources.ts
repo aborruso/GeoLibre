@@ -206,9 +206,9 @@ function wmsLayerCrs(layer: GeoLibreLayer): string | undefined {
   const template = Array.isArray(tiles) ? stringSource(tiles[0]) : undefined;
   if (!template) return undefined;
   try {
-    let params = new URL(template).searchParams;
-    const wrapped = params.get("url");
-    if (wrapped && /^https?:\/\//i.test(wrapped)) params = new URL(wrapped).searchParams;
+    const url = new URL(template);
+    const wrapped = url.protocol === "geolibre-wms:" ? url.searchParams.get("url") : null;
+    const params = wrapped ? new URL(wrapped).searchParams : url.searchParams;
     for (const [key, value] of params) {
       if (key.toLowerCase() === "crs" || key.toLowerCase() === "srs") return stringSource(value);
     }
@@ -216,6 +216,16 @@ function wmsLayerCrs(layer: GeoLibreLayer): string | undefined {
     // Not an absolute URL: no CRS to read.
   }
   return undefined;
+}
+
+/** The installed resolver's projection for `crs`, or null without one. */
+async function resolveWmsIdentifyProjection(crs: string): Promise<WmsIdentifyProjection | null> {
+  try {
+    return (await wmsIdentifyProjectionResolver?.(crs)) ?? null;
+  } catch {
+    // A resolver that throws, or rejects, is a CRS it cannot resolve.
+    return null;
+  }
 }
 
 /**
@@ -239,11 +249,7 @@ async function wmsIdentifyQueryBox(
   // WMS 1.3.0 follows the EPSG axis order, latitude first, except for CRS:84.
   const projection: WmsIdentifyProjection | null = GEOGRAPHIC_WMS_CRS.has(crs)
     ? { forward: (point) => point, northFirst: crs !== "CRS:84" }
-    : // A resolver that throws, or rejects, is a CRS it cannot resolve, as when
-      // it returns null.
-      await Promise.resolve()
-        .then(() => wmsIdentifyProjectionResolver?.(crs) ?? null)
-        .catch(() => null);
+    : await resolveWmsIdentifyProjection(crs);
   if (!projection) return { crs: "EPSG:3857", bbox: mercator };
 
   const [minX, minY, maxX, maxY] = mercator;

@@ -174,6 +174,12 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     );
     assert.equal(native.params.get("SRS"), "EPSG:6706");
     assert.ok(near(center(native.bbox), [12.5, 42.5]));
+    // A plain endpoint carrying its own url= parameter is not the desktop wrapper.
+    const proxied =
+      "https://proxy.example/wms?url=https://other.example/wms?CRS=EPSG:4258" +
+      "&VERSION=1.3.0&CRS=EPSG:6706&BBOX={bbox-epsg-3857}";
+    const plainProxy = await identifyQuery({ version: "1.3.0", tiles: [proxied] }, [12.5, 42.5]);
+    assert.equal(plainProxy.params.get("CRS"), "EPSG:6706");
   });
 
   it("resolves the CRS once per click, not once per probed format", async () => {
