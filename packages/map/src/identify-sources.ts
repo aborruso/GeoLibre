@@ -389,7 +389,7 @@ function addProperty(target: Record<string, string>, name: string, value: string
   });
 }
 
-function isRowOf(cells: Element[], tag: string): boolean {
+function isRowOf(cells: Element[], tag: "th" | "td"): boolean {
   return cells.length > 0 && cells.every((cell) => cell.localName === tag);
 }
 
@@ -439,19 +439,27 @@ function tableProperties(table: Element): Record<string, string> | null {
 /**
  * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888),
  * see tableProperties. A request for several layers can get one table per
- * layer: their fields are merged, a name already taken getting a ` (2)`,
- * ` (3)` suffix, as within one table. Null when no table has either shape.
+ * layer: the first `layerCount` tables with a shape are merged, a name already
+ * taken getting a ` (2)`, ` (3)` suffix, as within one table. With one layer
+ * only the first is read, as the JSON branch reads the first feature: a server
+ * may give one table per feature. Null when no table has either shape.
  */
-function propertiesFromHtmlTables(document: Document): Record<string, string> | null {
+function propertiesFromHtmlTables(
+  document: Document,
+  layerCount: number,
+): Record<string, string> | null {
   const merged: Record<string, string> = {};
   // A table nested in a cell belongs to that cell's value, not to the answer.
   const tables = Array.from(document.querySelectorAll("table")).filter(
     (table) => !table.parentElement?.closest("table"),
   );
+  let read = 0;
   for (const table of tables) {
-    for (const [name, value] of Object.entries(tableProperties(table) ?? {})) {
-      addProperty(merged, name, value);
-    }
+    if (read >= layerCount) break;
+    const properties = tableProperties(table);
+    if (!properties) continue;
+    read += 1;
+    for (const [name, value] of Object.entries(properties)) addProperty(merged, name, value);
   }
   return Object.keys(merged).length > 0 ? merged : null;
 }
@@ -596,7 +604,10 @@ export async function fetchWmsIdentifyProperties(
       // HTML we did not ask for (often a server error page) is kept as a
       // fallback so the remaining info formats are still tried.
       if (!headerlessHtml || infoFormat.includes("html")) {
-        return { properties: propertiesFromHtmlTables(document) ?? { result: resultText } };
+        const layerCount = Math.max(1, (stringSource(layer.source.layers) ?? "").split(",").length);
+        return {
+          properties: propertiesFromHtmlTables(document, layerCount) ?? { result: resultText },
+        };
       }
       fallbackText = fallbackText || resultText;
       continue;

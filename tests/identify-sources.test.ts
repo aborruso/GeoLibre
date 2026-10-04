@@ -223,13 +223,13 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
 // An HTML answer carries its attributes in a table; read it into fields
 // instead of one run-together `result` (#2888).
 describe("fetchWmsIdentifyProperties with HTML tables", () => {
-  async function identifyHtml(body: string) {
+  async function identifyHtml(body: string, layers = "roads") {
     stubFetch(`<html><body>${body}</body></html>`, "text/html");
     const original = globalThis.DOMParser;
     globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
     try {
       return await fetchWmsIdentifyProperties(
-        wmsLayer({ infoFormat: "text/html" }),
+        wmsLayer({ infoFormat: "text/html", layers }),
         [12.5973, 42.2979],
         16,
         new AbortController().signal,
@@ -292,14 +292,24 @@ describe("fetchWmsIdentifyProperties with HTML tables", () => {
   });
 
   it("merges the tables of a multi-layer answer, suffixing a repeated name", async () => {
-    const result = await identifyHtml(`
+    const result = await identifyHtml(
+      `
       <table><tr><th colspan=2>Layer 'roads'</th></tr>
         <tr><th>name</th><td>Via Roma</td></tr></table>
       <table><tr><th colspan=2>Layer 'parcels'</th></tr>
-        <tr><th>name</th><td>751</td></tr><tr><th>sheet</th><td>4</td></tr></table>`);
+        <tr><th>name</th><td>751</td></tr><tr><th>sheet</th><td>4</td></tr></table>`,
+      "roads,parcels",
+    );
     assert.deepEqual(result, {
       properties: { name: "Via Roma", "name (2)": "751", sheet: "4" },
     });
+  });
+
+  it("reads only the first table for one layer, as the first feature", async () => {
+    const result = await identifyHtml(`
+      <table><tr><th>name</th><td>Via Roma</td></tr></table>
+      <table><tr><th>name</th><td>Via Milano</td></tr></table>`);
+    assert.deepEqual(result, { properties: { name: "Via Roma" } });
   });
 
   it("keeps fields named like Object members, and suffixes a name repeated in one table", async () => {
