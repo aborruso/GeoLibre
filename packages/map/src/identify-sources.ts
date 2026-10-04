@@ -378,51 +378,68 @@ function isRowOf(cells: Element[], tag: string): boolean {
 }
 
 /**
- * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888):
- * one property per `<th>name</th><td>value</td>` row or, for a table with a
- * column header, the header naming the cells of the first data row: the first
- * all-`<td>` row right below an all-`<th>` row of the same length. Rows of any
- * other shape, such as a title spanning the table, are skipped, and so are the
- * rows of a table nested in a cell. Null when no table has either shape.
+ * The attributes in one HTML table: one property per `<th>name</th><td>value</td>`
+ * row or, for a table with a column header, the header naming the cells of the
+ * first data row: the first all-`<td>` row right below an all-`<th>` row of the
+ * same length, at least two cells wide (a lone `<th>` over a lone `<td>` reads
+ * as a title over free text, not as a field). Rows of any other shape, such as
+ * a title spanning the table, are skipped, and so are the rows of a table
+ * nested in a cell. Null when the table has neither shape.
+ */
+function tableProperties(table: Element): Record<string, string> | null {
+  const rows = Array.from(table.querySelectorAll("tr"))
+    .filter((row) => row.closest("table") === table)
+    .map((row) =>
+      Array.from(row.children).filter((cell) => cell.localName === "th" || cell.localName === "td"),
+    );
+
+  const pairs: Record<string, string> = {};
+  for (const cells of rows) {
+    if (cells.length !== 2 || cells[0].localName !== "th" || cells[1].localName !== "td") continue;
+    const name = cellText(cells[0]);
+    if (name) pairs[name] = cellText(cells[1]);
+  }
+  if (Object.keys(pairs).length > 0) return pairs;
+
+  const valuesIndex = rows.findIndex(
+    (cells, index) =>
+      index > 0 &&
+      cells.length > 1 &&
+      isRowOf(cells, "td") &&
+      rows[index - 1].length === cells.length &&
+      isRowOf(rows[index - 1], "th"),
+  );
+  if (valuesIndex < 0) return null;
+  const header = rows[valuesIndex - 1];
+  const values = rows[valuesIndex];
+  const columns: Record<string, string> = {};
+  header.forEach((cell, index) => {
+    const name = cellText(cell);
+    if (name) columns[name] = cellText(values[index]);
+  });
+  return Object.keys(columns).length > 0 ? columns : null;
+}
+
+/**
+ * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888),
+ * see tableProperties. A request for several layers can get one table per
+ * layer: their fields are merged, a name already taken getting a ` (2)`,
+ * ` (3)` suffix. Null when no table has either shape.
  */
 function propertiesFromHtmlTables(document: Document): Record<string, string> | null {
-  for (const table of Array.from(document.querySelectorAll("table"))) {
-    const rows = Array.from(table.querySelectorAll("tr"))
-      .filter((row) => row.closest("table") === table)
-      .map((row) =>
-        Array.from(row.children).filter(
-          (cell) => cell.localName === "th" || cell.localName === "td",
-        ),
-      );
-
-    const pairs: Record<string, string> = {};
-    for (const cells of rows) {
-      if (cells.length !== 2 || cells[0].localName !== "th" || cells[1].localName !== "td")
-        continue;
-      const name = cellText(cells[0]);
-      if (name) pairs[name] = cellText(cells[1]);
+  const merged: Record<string, string> = {};
+  // A table nested in a cell belongs to that cell's value, not to the answer.
+  const tables = Array.from(document.querySelectorAll("table")).filter(
+    (table) => !table.parentElement?.closest("table"),
+  );
+  for (const table of tables) {
+    for (const [name, value] of Object.entries(tableProperties(table) ?? {})) {
+      let key = name;
+      for (let copy = 2; key in merged; copy += 1) key = `${name} (${copy})`;
+      merged[key] = value;
     }
-    if (Object.keys(pairs).length > 0) return pairs;
-
-    const valuesIndex = rows.findIndex(
-      (cells, index) =>
-        index > 0 &&
-        cells.length > 1 &&
-        isRowOf(cells, "td") &&
-        rows[index - 1].length === cells.length &&
-        isRowOf(rows[index - 1], "th"),
-    );
-    if (valuesIndex < 0) continue;
-    const header = rows[valuesIndex - 1];
-    const values = rows[valuesIndex];
-    const columns: Record<string, string> = {};
-    header.forEach((cell, index) => {
-      const name = cellText(cell);
-      if (name) columns[name] = cellText(values[index]);
-    });
-    if (Object.keys(columns).length > 0) return columns;
   }
-  return null;
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 function isWmsExceptionResponse(value: string): boolean {

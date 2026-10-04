@@ -291,6 +291,24 @@ describe("fetchWmsIdentifyProperties with HTML tables", () => {
     assert.equal("material" in (result?.properties ?? {}), false);
   });
 
+  it("merges the tables of a multi-layer answer, suffixing a repeated name", async () => {
+    const result = await identifyHtml(`
+      <table><tr><th colspan=2>Layer 'roads'</th></tr>
+        <tr><th>name</th><td>Via Roma</td></tr></table>
+      <table><tr><th colspan=2>Layer 'parcels'</th></tr>
+        <tr><th>name</th><td>751</td></tr><tr><th>sheet</th><td>4</td></tr></table>`);
+    assert.deepEqual(result, {
+      properties: { name: "Via Roma", "name (2)": "751", sheet: "4" },
+    });
+  });
+
+  it("reads a one-column header over one cell as text, not as a field", async () => {
+    const result = await identifyHtml(
+      "<table><tr><th>Roads</th></tr><tr><td>no hit</td></tr></table>",
+    );
+    assert.deepEqual(Object.keys(result?.properties ?? {}), ["result"]);
+  });
+
   it("keeps the text result when no table has either shape", async () => {
     assert.deepEqual(await identifyHtml("<p>Road  42</p>"), { properties: { result: "Road 42" } });
     // A header with no data row below it says nothing about a feature.
