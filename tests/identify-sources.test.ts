@@ -220,6 +220,22 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
     }) as never);
     const throwing = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
     assert.equal(throwing.params.get("CRS"), "EPSG:3857");
+    // A projection whose conversion throws, or gives NaN, for the click.
+    setWmsIdentifyProjectionResolver(async () => ({
+      forward: () => {
+        throw new Error("point outside the projection");
+      },
+      northFirst: false,
+    }));
+    const outside = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
+    assert.equal(outside.params.get("CRS"), "EPSG:3857");
+    setWmsIdentifyProjectionResolver(async () => ({
+      forward: () => [NaN, NaN],
+      northFirst: false,
+    }));
+    const nan = await identifyQuery({ version: "1.3.0", crs: "EPSG:25833" }, [12.5, 42.5]);
+    assert.equal(nan.params.get("CRS"), "EPSG:3857");
+    assert.ok(nan.params.get("BBOX")!.split(",").map(Number).every(Number.isFinite));
   });
 });
 describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {

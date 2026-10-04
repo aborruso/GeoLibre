@@ -263,21 +263,29 @@ async function wmsIdentifyQueryBox(
   if (!projection) return { crs: "EPSG:3857", bbox: mercator };
 
   const [minX, minY, maxX, maxY] = mercator;
-  const corners = [
-    [minX, minY],
-    [minX, maxY],
-    [maxX, minY],
-    [maxX, maxY],
-  ].map(([x, y]) => projection.forward(webMercatorToLngLat(x, y)));
-  const xs = corners.map(([x]) => x);
-  const ys = corners.map(([, y]) => y);
-  const halfX = (Math.max(...xs) - Math.min(...xs)) / 2;
-  const halfY = (Math.max(...ys) - Math.min(...ys)) / 2;
-  const [x, y] = projection.forward(lngLat);
-  const bbox =
-    isV13 && projection.northFirst
-      ? [y - halfY, x - halfX, y + halfY, x + halfX]
-      : [x - halfX, y - halfY, x + halfX, y + halfY];
+  let bbox: number[];
+  try {
+    const corners = [
+      [minX, minY],
+      [minX, maxY],
+      [maxX, minY],
+      [maxX, maxY],
+    ].map(([x, y]) => projection.forward(webMercatorToLngLat(x, y)));
+    const xs = corners.map(([x]) => x);
+    const ys = corners.map(([, y]) => y);
+    const halfX = (Math.max(...xs) - Math.min(...xs)) / 2;
+    const halfY = (Math.max(...ys) - Math.min(...ys)) / 2;
+    const [x, y] = projection.forward(lngLat);
+    bbox =
+      isV13 && projection.northFirst
+        ? [y - halfY, x - halfX, y + halfY, x + halfX]
+        : [x - halfX, y - halfY, x + halfX, y + halfY];
+  } catch {
+    // A click the projection cannot convert (outside its domain): ask in Web Mercator.
+    return { crs: "EPSG:3857", bbox: mercator };
+  }
+  // A conversion that does not throw can still give NaN or Infinity.
+  if (!bbox.every(Number.isFinite)) return { crs: "EPSG:3857", bbox: mercator };
   return { crs, bbox };
 }
 
