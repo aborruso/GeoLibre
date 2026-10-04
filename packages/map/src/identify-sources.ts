@@ -375,7 +375,9 @@ export async function fetchWmsIdentifyProperties(
     if (!response.ok) {
       // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
       // the status code so a failed request never surfaces as "No attributes".
-      fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
+      // Some servers send their exception report with an error status too.
+      if (isWmsExceptionResponse(text)) exceptionText = wmsExceptionMessage(text);
+      else fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
       continue;
     }
 

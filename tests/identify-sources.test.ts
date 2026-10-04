@@ -101,6 +101,18 @@ describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
     );
   });
 
+  it("reads an exception sent with an error status as an error too", async () => {
+    globalThis.fetch = (async () =>
+      new Response(exception, {
+        status: 400,
+        headers: { "content-type": "text/xml" },
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo returned an error: Layer buildings is not queryable$/,
+    );
+  });
+
   it("still returns a format that answered when another one raised an exception", async () => {
     const urls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
