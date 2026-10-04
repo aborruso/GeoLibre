@@ -604,7 +604,10 @@ export async function fetchWmsIdentifyProperties(
       // HTML we did not ask for (often a server error page) is kept as a
       // fallback so the remaining info formats are still tried.
       if (!headerlessHtml || infoFormat.includes("html")) {
-        const layerCount = Math.max(1, (stringSource(layer.source.layers) ?? "").split(",").length);
+        const layerCount = Math.max(
+          1,
+          (stringSource(layer.source.layers) ?? "").split(",").filter((name) => name.trim()).length,
+        );
         return {
           properties: propertiesFromHtmlTables(document, layerCount) ?? { result: resultText },
         };
